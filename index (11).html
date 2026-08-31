@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle Empadões</title>
+<style>
+  :root{
+    --bg:#f4f1ea; --card:#ffffff; --ink:#2b2420; --sub:#8a7f72;
+    --accent:#b5502f; --accent-dark:#8c3c22; --good:#3f7d4f; --bad:#c0392b;
+    --border:#e6e0d6; --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);}
+  header{background:var(--accent);color:#fff;padding:16px 18px;position:sticky;top:0;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.1);display:flex;justify-content:space-between;align-items:center;}
+  header h1{margin:0;font-size:18px;font-weight:700;}
+  header p{margin:2px 0 0;font-size:12px;opacity:.85;}
+  header button.logout{background:rgba(255,255,255,.15);border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;}
+  nav{display:flex;overflow-x:auto;background:var(--accent-dark);position:sticky;top:56px;z-index:9;-webkit-overflow-scrolling:touch;}
+  nav button{flex:0 0 auto;background:none;border:none;color:#f0e4dd;padding:12px 14px;font-size:13px;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;}
+  nav button.active{color:#fff;border-bottom:3px solid #fff;font-weight:600;}
+  main{padding:14px;max-width:900px;margin:0 auto;padding-bottom:80px;}
+  .tab{display:none;}
+  .tab.active{display:block;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+  .card h2{margin:0 0 12px;font-size:15px;color:var(--accent-dark);}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;}
+  .kpi .label{font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.03em;}
+  .kpi .value{font-size:20px;font-weight:700;margin-top:4px;}
+  .kpi .value.good{color:var(--good);}
+  .kpi .value.bad{color:var(--bad);}
+  form{display:flex;flex-direction:column;gap:8px;}
+  label{font-size:12px;color:var(--sub);font-weight:600;}
+  input,select{padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:#fff;color:var(--ink);width:100%;}
+  .row{display:flex;gap:8px;}
+  .row > *{flex:1;}
+  button.primary{background:var(--accent);color:#fff;border:none;padding:12px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;}
+  button.primary:disabled{opacity:.5;}
+  button.primary:active{background:var(--accent-dark);}
+  button.secondary{background:#efe7db;color:var(--accent-dark);border:none;padding:8px 12px;border-radius:8px;font-size:12px;cursor:pointer;}
+  button.danger{background:#fbe9e7;color:var(--bad);border:none;padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+  th{text-align:left;color:var(--sub);font-size:11px;text-transform:uppercase;padding:6px 4px;border-bottom:1px solid var(--border);}
+  td{padding:8px 4px;border-bottom:1px solid var(--border);}
+  .empty{color:var(--sub);font-size:13px;padding:12px 0;text-align:center;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+  .badge.low{background:#fbe9e7;color:var(--bad);}
+  .badge.ok{background:#e8f3ea;color:var(--good);}
+  .recipe-item{display:flex;gap:6px;align-items:center;background:#faf7f2;padding:8px;border-radius:8px;margin-bottom:6px;}
+  .recipe-item select{flex:2;}
+  .recipe-item input{flex:1;}
+  .muted{color:var(--sub);font-size:12px;}
+  #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;}
+  #toast.show{opacity:1;}
+  .sale-line{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
+  .sale-line select{flex:2;}
+  .sale-line input{flex:1;}
+  .loading{text-align:center;padding:60px 20px;color:var(--sub);}
+  #authScreen{max-width:360px;margin:60px auto;padding:0 20px;}
+  #authScreen .card{padding:24px;}
+  #authScreen h1{text-align:center;font-size:20px;margin-bottom:4px;}
+  #authScreen p.sub{text-align:center;color:var(--sub);font-size:13px;margin-bottom:20px;}
+  .auth-toggle{text-align:center;font-size:12px;margin-top:12px;color:var(--sub);}
+  .auth-toggle a{color:var(--accent);text-decoration:none;font-weight:600;cursor:pointer;}
+  .auth-error{color:var(--bad);font-size:12px;text-align:center;}
+  #appRoot{display:none;}
+</style>
+</head>
+<body>
+
+<div id="authScreen">
+  <h1>🥧 Controle Empadões</h1>
+  <p class="sub">Custo · Estoque · Vendas</p>
+  <div class="card">
+    <form id="authForm">
+      <label>E-mail</label>
+      <input type="email" id="authEmail" required autocomplete="username">
+      <label>Senha</label>
+      <input type="password" id="authPassword" required autocomplete="current-password" minlength="6">
+      <div id="authError" class="auth-error"></div>
+      <button class="primary" type="submit" id="authSubmitBtn">Entrar</button>
+    </form>
+    <div class="auth-toggle" id="authToggle">Ainda não tem conta? <a id="authToggleLink">Criar conta</a></div>
+  </div>
+</div>
+
+<div id="appRoot">
+  <header>
+    <div>
+      <h1>🥧 Controle Empadões</h1>
+      <p id="subtitle"></p>
+    </div>
+    <button class="logout" id="logoutBtn">Sair</button>
+  </header>
+
+  <nav id="nav">
+    <button data-tab="dashboard" class="active">Dashboard</button>
+    <button data-tab="vendas">Vendas</button>
+    <button data-tab="producao">Produção</button>
+    <button data-tab="estoque">Estoque</button>
+    <button data-tab="produtos">Produtos</button>
+    <button data-tab="fichas">Fichas Técnicas</button>
+    <button data-tab="ingredientes">Ingredientes</button>
+    <button data-tab="compras">Compras</button>
+  </nav>
+
+  <main id="main"><div class="loading">Carregando dados...</div></main>
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// ===================== SUPABASE CONFIG =====================
+const SUPABASE_URL = 'https://hfeotdvlrmxvlecybmyc.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_vqqUlJE6dzArbUDguGej_w_6Tsd4P0i';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ===================== UTIL =====================
+const fmtBRL = v => (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('pt-BR');
+const todayISO = () => {
+  const now = new Date();
+  const tz = new Date(now.toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
+  return tz.toISOString().slice(0,10);
+};
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+const UNIT_FAMILY = {kg:'peso', g:'peso', l:'volume', ml:'volume', un:'unidade'};
+const TO_BASE = {kg:1000, g:1, l:1000, ml:1, un:1};
+const BASE_LABEL = {peso:'g', volume:'ml', unidade:'un'};
+function convertToBase(qty, unit){ return qty * TO_BASE[unit]; }
+function displayQty(baseQty, family){
+  if(family==='peso') return baseQty>=1000 ? (baseQty/1000).toFixed(3).replace(/\.?0+$/,'')+' kg' : baseQty.toFixed(0)+' g';
+  if(family==='volume') return baseQty>=1000 ? (baseQty/1000).toFixed(3).replace(/\.?0+$/,'')+' L' : baseQty.toFixed(0)+' ml';
+  return baseQty.toFixed(baseQty%1===0?0:2)+' un';
+}
+function displayCostPerBase(cost, family){
+  if(family==='peso') return fmtBRL(cost*1000)+' /kg';
+  if(family==='volume') return fmtBRL(cost*1000)+' /L';
+  return fmtBRL(cost)+' /un';
+}
+
+// ===================== AUTH =====================
+let authMode = 'login';
+const authForm = document.getElementById('authForm');
+const authToggleLink = document.getElementById('authToggleLink');
+const authToggleText = document.getElementById('authToggle');
+const authError = document.getElementById('authError');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+
+authToggleLink.onclick = ()=>{
+  authMode = authMode==='login' ? 'signup' : 'login';
+  authSubmitBtn.textContent = authMode==='login' ? 'Entrar' : 'Criar conta';
+  authToggleText.innerHTML = authMode==='login'
+    ? 'Ainda não tem conta? <a id="authToggleLink">Criar conta</a>'
+    : 'Já tem conta? <a id="authToggleLink">Entrar</a>';
+  document.getElementById('authToggleLink').onclick = authToggleLink.onclick;
+  authError.textContent='';
+};
+
+authForm.onsubmit = async (e)=>{
+  e.preventDefault();
+  authError.textContent='';
+  authSubmitBtn.disabled = true;
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  try{
+    if(authMode==='login'){
+      const {error} = await supabase.auth.signInWithPassword({email,password});
+      if(error) throw error;
+    } else {
+      const {error} = await supabase.auth.signUp({email,password});
+      if(error) throw error;
+      authError.style.color='var(--good)';
+      authError.textContent='Conta criada! Se pedir confirmação por e-mail, confirme e faça login.';
+      authSubmitBtn.disabled = false;
+      return;
+    }
+  }catch(err){
+    authError.style.color='var(--bad)';
+    authError.textContent = err.message || 'Erro ao autenticar.';
+  }
+  authSubmitBtn.disabled = false;
+};
+
+document.getElementById('logoutBtn').onclick = async ()=>{
+  await supabase.auth.signOut();
+  location.reload();
+};
+
+supabase.auth.onAuthStateChange((event, session)=>{
+  if(session){
+    document.getElementById('authScreen').style.display='none';
+    document.getElementById('appRoot').style.display='block';
+    boot();
+  } else {
+    document.getElementById('authScreen').style.display='block';
+    document.getElementById('appRoot').style.display='none';
+  }
+});
+
+// ===================== DATA LAYER =====================
+let DB = {ingredients:[],purchases:[],products:[],recipes:{},recipeItems:{},productions:[],sales:[]};
+let booted = false;
+
+async function loadAll(){
+  const [ing, pur, prod, rec, ri, pb, sales, saleItems] = await Promise.all([
+    supabase.from('ingredients').select('*').eq('active',true).order('name'),
+    supabase.from('purchases').select('*').order('purchase_date',{ascending:false}),
+    supabase.from('products').select('*').eq('active',true).order('name'),
+    supabase.from('recipes').select('*'),
+    supabase.from('recipe_items').select('*'),
+    supabase.from('production_batches').select('*').order('production_date',{ascending:false}),
+    supabase.from('sales').select('*').order('sale_date',{ascending:false}),
+    supabase.from('sale_items').select('*')
+  ]);
+  DB.ingredients = ing.data || [];
+  DB.purchases = pur.data || [];
+  DB.products = prod.data || [];
+  DB.productions = pb.data || [];
+
+  DB.recipes = {};
+  DB.recipeItems = {};
+  (rec.data||[]).forEach(r=>{ DB.recipes[r.product_id] = r; });
+  (ri.data||[]).forEach(item=>{
+    if(!DB.recipeItems[item.recipe_id]) DB.recipeItems[item.recipe_id] = [];
+    DB.recipeItems[item.recipe_id].push(item);
+  });
+
+  const itemsBySale = {};
+  (saleItems.data||[]).forEach(it=>{
+    if(!itemsBySale[it.sale_id]) itemsBySale[it.sale_id]=[];
+    itemsBySale[it.sale_id].push(it);
+  });
+  DB.sales = (sales.data||[]).map(s=>({...s, items: itemsBySale[s.id]||[]}));
+}
+
+function getIngredient(id){ return DB.ingredients.find(i=>i.id===id); }
+function getProduct(id){ return DB.products.find(p=>p.id===id); }
+function getRecipeByProduct(productId){
+  const r = DB.recipes[productId];
+  if(!r) return null;
+  return {...r, items: (DB.recipeItems[r.id]||[])};
+}
+function recipeCostPerUnit(productId){
+  const r = getRecipeByProduct(productId);
+  if(!r || !r.items.length) return 0;
+  let total = 0;
+  for(const it of r.items){
+    const ing = getIngredient(it.ingredient_id);
+    if(!ing) continue;
+    total += convertToBase(it.qty, it.unit) * ing.avg_cost;
+  }
+  return r.yield_qty>0 ? total/r.yield_qty : 0;
+}
+
+async function registerIngredient(name, unit, minStockInput){
+  const family = UNIT_FAMILY[unit];
+  const {data, error} = await supabase.from('ingredients').insert({
+    name, family, unit, stock:0, avg_cost:0,
+    min_stock: convertToBase(minStockInput||0, unit)
+  }).select().single();
+  if(error){ toast('Erro: '+error.message); return; }
+  DB.ingredients.push(data);
+}
+
+async function registerPurchase(ingredientId, date, qty, unit, totalCost){
+  const ing = getIngredient(ingredientId);
+  if(!ing) return;
+  const qtyBase = convertToBase(qty, unit);
+  const costPerBase = totalCost / qtyBase;
+  const oldStock = Number(ing.stock), oldAvg = Number(ing.avg_cost);
+  const newStock = oldStock + qtyBase;
+  const newAvg = newStock>0 ? ((oldStock*oldAvg)+(qtyBase*costPerBase))/newStock : costPerBase;
+
+  const {error: pErr} = await supabase.from('purchases').insert({
+    ingredient_id: ingredientId, purchase_date: date, qty, unit, qty_base: qtyBase,
+    total_cost: totalCost, cost_per_base: costPerBase,
+    avg_cost_before: oldAvg, avg_cost_after: newAvg
+  });
+  if(pErr){ toast('Erro: '+pErr.message); return; }
+
+  const {error: iErr} = await supabase.from('ingredients').update({
+    stock: newStock, avg_cost: newAvg, updated_at: new Date().toISOString()
+  }).eq('id', ingredientId);
+  if(iErr){ toast('Erro: '+iErr.message); return; }
+
+  await supabase.from('inventory_movements').insert({
+    item_type:'ingredient', item_id: ingredientId, movement_type:'compra',
+    qty_before: oldStock, qty_change: qtyBase, qty_after: newStock, note: 'Compra em '+date
+  });
+
+  await loadAll();
+}
+
+async function registerProduct(name, price, minStock){
+  const {data, error} = await supabase.from('products').insert({
+    name, price, stock:0, min_stock: minStock||0, last_unit_cost:0
+  }).select().single();
+  if(error){ toast('Erro: '+error.message); return; }
+  DB.products.push(data);
+}
+
+async function saveRecipe(productId, items, yieldQty){
+  let recipe = DB.recipes[productId];
+  if(!recipe){
+    const {data, error} = await supabase.from('recipes').insert({product_id: productId, yield_qty: yieldQty}).select().single();
+    if(error){ toast('Erro: '+error.message); return; }
+    recipe = data;
+  } else {
+    const {error} = await supabase.from('recipes').update({yield_qty: yieldQty, updated_at: new Date().toISOString()}).eq('id', recipe.id);
+    if(error){ toast('Erro: '+error.message); return; }
+    await supabase.from('recipe_items').delete().eq('recipe_id', recipe.id);
+  }
+  const rows = items.map(it=>({recipe_id: recipe.id, ingredient_id: it.ingredientId, qty: it.qty, unit: it.unit}));
+  const {error: riErr} = await supabase.from('recipe_items').insert(rows);
+  if(riErr){ toast('Erro: '+riErr.message); return; }
+  await loadAll();
+}
+
+function checkStockForProduction(productId, qtyProduced){
+  const r = getRecipeByProduct(productId);
+  if(!r) return {ok:false, missing:[]};
+  const scale = qtyProduced / r.yield_qty;
+  const missing = [];
+  for(const it of r.items){
+    const ing = getIngredient(it.ingredient_id);
+    const needBase = convertToBase(it.qty, it.unit) * scale;
+    if(!ing || Number(ing.stock) < needBase){
+      missing.push({name: ing?ing.name:'?', need: needBase, have: ing?Number(ing.stock):0, family: ing?ing.family:'peso'});
+    }
+  }
+  return {ok: missing.length===0, missing};
+}
+
+async function registerProduction(productId, date, qtyProduced, qtyLost, force){
+  const r = getRecipeByProduct(productId);
+  const product = getProduct(productId);
+  if(!r || !product) return {ok:false, msg:'Produto sem ficha técnica.'};
+  const check = checkStockForProduction(productId, qtyProduced);
+  if(!check.ok && !force) return {ok:false, msg:'Estoque insuficiente de: '+check.missing.map(m=>m.name).join(', '), missing:check.missing};
+
+  const scale = qtyProduced / r.yield_qty;
+  let batchCost = 0;
+  const ingredientUpdates = [];
+  for(const it of r.items){
+    const ing = getIngredient(it.ingredient_id);
+    if(!ing) continue;
+    const needBase = convertToBase(it.qty, it.unit) * scale;
+    batchCost += needBase * Number(ing.avg_cost);
+    const before = Number(ing.stock);
+    const after = Math.max(before - needBase, 0);
+    ingredientUpdates.push({id: ing.id, before, after, change: -needBase});
+  }
+  const usable = Math.max(qtyProduced - (qtyLost||0), 0);
+  const unitCost = usable>0 ? batchCost/usable : 0;
+
+  const {data: batch, error: bErr} = await supabase.from('production_batches').insert({
+    product_id: productId, production_date: date, qty_planned: qtyProduced,
+    qty_produced: qtyProduced, qty_lost: qtyLost||0, usable_qty: usable,
+    batch_cost: batchCost, unit_cost: unitCost, forced: !check.ok
+  }).select().single();
+  if(bErr) return {ok:false, msg: bErr.message};
+
+  for(const u of ingredientUpdates){
+    await supabase.from('ingredients').update({stock: u.after, updated_at: new Date().toISOString()}).eq('id', u.id);
+    await supabase.from('inventory_movements').insert({
+      item_type:'ingredient', item_id: u.id, movement_type:'producao_saida',
+      qty_before: u.before, qty_change: u.change, qty_after: u.after, origin_id: batch.id
+    });
+  }
+
+  const prodBefore = Number(product.stock);
+  const prodAfter = prodBefore + usable;
+  await supabase.from('products').update({stock: prodAfter, last_unit_cost: unitCost, updated_at: new Date().toISOString()}).eq('id', productId);
+  await supabase.from('inventory_movements').insert({
+    item_type:'product', item_id: productId, movement_type:'producao_entrada',
+    qty_before: prodBefore, qty_change: usable, qty_after: prodAfter, origin_id: batch.id
+  });
+
+  await loadAll();
+  return {ok:true};
+}
+
+async function registerSale(lines, date, discount){
+  for(const l of lines){
+    const p = getProduct(l.productId);
+    if(!p || Number(p.stock) < l.qty) return {ok:false, msg:'Estoque insuficiente para '+(p?p.name:'produto')};
+  }
+  let total=0, cost=0;
+  const itemsToInsert = [];
+  for(const l of lines){
+    const p = getProduct(l.productId);
+    const subtotal = l.qty*l.unitPrice;
+    const costLine = l.qty*Number(p.last_unit_cost);
+    total += subtotal; cost += costLine;
+    itemsToInsert.push({productId:l.productId, qty:l.qty, unitPrice:l.unitPrice, costUnit:Number(p.last_unit_cost), subtotal, costLine});
+  }
+  total -= (discount||0);
+
+  const {data: sale, error: sErr} = await supabase.from('sales').insert({
+    sale_date: date, discount: discount||0, total, cost, profit: total-cost
+  }).select().single();
+  if(sErr) return {ok:false, msg: sErr.message};
+
+  const rows = itemsToInsert.map(it=>({
+    sale_id: sale.id, product_id: it.productId, qty: it.qty, unit_price: it.unitPrice,
+    cost_unit: it.costUnit, subtotal: it.subtotal, cost_line: it.costLine
+  }));
+  await supabase.from('sale_items').insert(rows);
+
+  for(const it of itemsToInsert){
+    const p = getProduct(it.productId);
+    const before = Number(p.stock);
+    const after = before - it.qty;
+    await supabase.from('products').update({stock: after, updated_at: new Date().toISOString()}).eq('id', it.productId);
+    await supabase.from('inventory_movements').insert({
+      item_type:'product', item_id: it.productId, movement_type:'venda',
+      qty_before: before, qty_change: -it.qty, qty_after: after, origin_id: sale.id
+    });
+  }
+  await loadAll();
+  return {ok:true};
+}
+
+async function cancelSale(saleId){
+  const sale = DB.sales.find(s=>s.id===saleId);
+  if(!sale || sale.cancelled) return;
+  for(const it of sale.items){
+    const p = getProduct(it.product_id);
+    if(!p) continue;
+    const before = Number(p.stock);
+    const after = before + Number(it.qty);
+    await supabase.from('products').update({stock: after, updated_at: new Date().toISOString()}).eq('id', it.product_id);
+    await supabase.from('inventory_movements').insert({
+      item_type:'product', item_id: it.product_id, movement_type:'cancelamento',
+      qty_before: before, qty_change: Number(it.qty), qty_after: after, origin_id: saleId
+    });
+  }
+  await supabase.from('sales').update({cancelled:true, cancelled_at: new Date().toISOString()}).eq('id', saleId);
+  await loadAll();
+}
+
+// ===================== METRICS =====================
+function metrics(){
+  const validSales = DB.sales.filter(s=>!s.cancelled);
+  const today = todayISO();
+  const todaySales = validSales.filter(s=>s.sale_date===today);
+  const monthPrefix = today.slice(0,7);
+  const monthSales = validSales.filter(s=>s.sale_date.startsWith(monthPrefix));
+  const sum = (arr,f)=>arr.reduce((a,s)=>a+f(s),0);
+  const stockValue = DB.ingredients.reduce((a,i)=>a+Number(i.stock)*Number(i.avg_cost),0) + DB.products.reduce((a,p)=>a+Number(p.stock)*Number(p.last_unit_cost),0);
+  const fatMes = sum(monthSales,s=>Number(s.total));
+  const lucroMes = sum(monthSales,s=>Number(s.profit));
+  return {
+    faturamentoHoje: sum(todaySales,s=>Number(s.total)),
+    faturamentoMes: fatMes,
+    lucroHoje: sum(todaySales,s=>Number(s.profit)),
+    lucroMes,
+    vendasHoje: todaySales.length,
+    unidadesHoje: sum(todaySales,s=>s.items.reduce((a,i)=>a+Number(i.qty),0)),
+    ticketMedio: monthSales.length ? fatMes/monthSales.length : 0,
+    cmvMes: sum(monthSales,s=>Number(s.cost)),
+    margemMes: fatMes>0 ? lucroMes/fatMes*100 : 0,
+    stockValue
+  };
+}
+
+// ===================== RENDER =====================
+let activeTab = 'dashboard';
+function render(){
+  document.getElementById('subtitle').textContent = new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});
+  document.getElementById('main').innerHTML = renderTab(activeTab);
+  attachHandlers();
+}
+function renderTab(tab){
+  if(tab==='dashboard') return renderDashboard();
+  if(tab==='ingredientes') return renderIngredientes();
+  if(tab==='compras') return renderCompras();
+  if(tab==='produtos') return renderProdutos();
+  if(tab==='fichas') return renderFichas();
+  if(tab==='producao') return renderProducao();
+  if(tab==='estoque') return renderEstoque();
+  if(tab==='vendas') return renderVendas();
+  return '';
+}
+
+function renderDashboard(){
+  const m = metrics();
+  return `
+  <div class="grid">
+    <div class="kpi"><div class="label">Faturamento hoje</div><div class="value">${fmtBRL(m.faturamentoHoje)}</div></div>
+    <div class="kpi"><div class="label">Faturamento mês</div><div class="value">${fmtBRL(m.faturamentoMes)}</div></div>
+    <div class="kpi"><div class="label">Lucro bruto hoje</div><div class="value ${m.lucroHoje>=0?'good':'bad'}">${fmtBRL(m.lucroHoje)}</div></div>
+    <div class="kpi"><div class="label">Lucro bruto mês</div><div class="value ${m.lucroMes>=0?'good':'bad'}">${fmtBRL(m.lucroMes)}</div></div>
+    <div class="kpi"><div class="label">Vendas hoje</div><div class="value">${m.vendasHoje}</div></div>
+    <div class="kpi"><div class="label">Unidades vendidas hoje</div><div class="value">${m.unidadesHoje}</div></div>
+    <div class="kpi"><div class="label">Ticket médio (mês)</div><div class="value">${fmtBRL(m.ticketMedio)}</div></div>
+    <div class="kpi"><div class="label">Margem bruta (mês)</div><div class="value">${m.margemMes.toFixed(1)}%</div></div>
+    <div class="kpi"><div class="label">CMV (mês)</div><div class="value">${fmtBRL(m.cmvMes)}</div></div>
+    <div class="kpi"><div class="label">Valor em estoque</div><div class="value">${fmtBRL(m.stockValue)}</div></div>
+  </div>
+  <div class="card"><h2>⚠️ Alertas de estoque baixo</h2>${renderLowStockAlerts()}</div>
+  <div class="card"><h2>Últimas vendas</h2>${renderRecentSalesTable(5)}</div>`;
+}
+function renderLowStockAlerts(){
+  const lowIng = DB.ingredients.filter(i=>Number(i.min_stock)>0 && Number(i.stock)<Number(i.min_stock));
+  const lowProd = DB.products.filter(p=>Number(p.min_stock)>0 && Number(p.stock)<Number(p.min_stock));
+  if(!lowIng.length && !lowProd.length) return '<div class="empty">Nenhum alerta no momento.</div>';
+  let html='';
+  lowIng.forEach(i=>html+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">🧂 <b>${i.name}</b> — ${displayQty(Number(i.stock),i.family)} <span class="muted">(mín: ${displayQty(Number(i.min_stock),i.family)})</span></div>`);
+  lowProd.forEach(p=>html+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">🥧 <b>${p.name}</b> — ${p.stock} un <span class="muted">(mín: ${p.min_stock} un)</span></div>`);
+  return html;
+}
+function renderRecentSalesTable(limit){
+  const sales = [...DB.sales].filter(s=>!s.cancelled).slice(0,limit||100);
+  if(!sales.length) return '<div class="empty">Nenhuma venda registrada ainda.</div>';
+  const rows = sales.map(s=>`<tr>
+    <td>${fmtDate(s.sale_date)}</td>
+    <td>${s.items.map(i=>(getProduct(i.product_id)?.name||'?')+' x'+i.qty).join(', ')}</td>
+    <td>${fmtBRL(s.total)}</td>
+    <td style="color:${Number(s.profit)>=0?'var(--good)':'var(--bad)'}">${fmtBRL(s.profit)}</td>
+  </tr>`).join('');
+  return `<table><tr><th>Data</th><th>Itens</th><th>Total</th><th>Lucro</th></tr>${rows}</table>`;
+}
+
+function renderIngredientes(){
+  const rows = DB.ingredients.map(i=>`<tr>
+    <td>${i.name}</td><td>${displayQty(Number(i.stock),i.family)}</td>
+    <td>${displayCostPerBase(Number(i.avg_cost),i.family)}</td>
+    <td>${Number(i.min_stock)>0 && Number(i.stock)<Number(i.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td>
+  </tr>`).join('');
+  return `
+  <div class="card"><h2>Novo ingrediente</h2>
+    <form id="form-ingrediente">
+      <label>Nome</label><input name="name" required placeholder="Ex: Farinha de trigo">
+      <label>Unidade de medida</label>
+      <select name="unit" required>
+        <option value="kg">Quilo (kg)</option><option value="g">Grama (g)</option>
+        <option value="l">Litro (L)</option><option value="ml">Mililitro (ml)</option>
+        <option value="un">Unidade (un)</option>
+      </select>
+      <label>Estoque mínimo (nessa unidade, opcional)</label>
+      <input name="minStock" type="number" step="any" placeholder="Ex: 2">
+      <button class="primary" type="submit">Cadastrar ingrediente</button>
+    </form>
+  </div>
+  <div class="card"><h2>Ingredientes cadastrados</h2>
+    ${DB.ingredients.length ? `<table><tr><th>Nome</th><th>Estoque</th><th>Custo médio</th><th>Status</th></tr>${rows}</table>` : '<div class="empty">Nenhum ingrediente cadastrado.</div>'}
+  </div>`;
+}
+
+function renderCompras(){
+  const ingOptions = DB.ingredients.map(i=>`<option value="${i.id}">${i.name}</option>`).join('');
+  const rows = DB.purchases.map(p=>{
+    const ing = getIngredient(p.ingredient_id);
+    return `<tr><td>${fmtDate(p.purchase_date)}</td><td>${ing?ing.name:'—'}</td><td>${p.qty} ${p.unit}</td><td>${fmtBRL(p.total_cost)}</td></tr>`;
+  }).join('');
+  return `
+  <div class="card"><h2>Nova compra</h2>
+    ${DB.ingredients.length ? `
+    <form id="form-compra">
+      <label>Ingrediente</label><select name="ingredientId" required>${ingOptions}</select>
+      <label>Data</label><input name="date" type="date" value="${todayISO()}" required>
+      <div class="row">
+        <div><label>Quantidade</label><input name="qty" type="number" step="any" required></div>
+        <div><label>Unidade</label><select name="unit" required>
+          <option value="kg">kg</option><option value="g">g</option>
+          <option value="l">L</option><option value="ml">ml</option><option value="un">un</option>
+        </select></div>
+      </div>
+      <label>Valor total pago (R$)</label><input name="totalCost" type="number" step="any" required>
+      <button class="primary" type="submit">Registrar compra</button>
+    </form>` : '<div class="empty">Cadastre um ingrediente primeiro.</div>'}
+  </div>
+  <div class="card"><h2>Histórico de compras</h2>
+    ${DB.purchases.length ? `<table><tr><th>Data</th><th>Ingrediente</th><th>Qtd</th><th>Total</th></tr>${rows}</table>` : '<div class="empty">Nenhuma compra registrada.</div>'}
+  </div>`;
+}
+
+function renderProdutos(){
+  const rows = DB.products.map(p=>{
+    const cost = Number(p.last_unit_cost) || recipeCostPerUnit(p.id);
+    const margin = p.price>0 ? ((p.price-cost)/p.price*100) : 0;
+    return `<tr><td>${p.name}</td><td>${fmtBRL(p.price)}</td><td>${fmtBRL(cost)}</td>
+      <td style="color:${margin>=0?'var(--good)':'var(--bad)'}">${margin.toFixed(0)}%</td><td>${p.stock} un</td></tr>`;
+  }).join('');
+  return `
+  <div class="card"><h2>Novo produto</h2>
+    <form id="form-produto">
+      <label>Nome</label><input name="name" required placeholder="Ex: Empadão de Frango 1kg">
+      <label>Preço de venda (R$)</label><input name="price" type="number" step="any" required>
+      <label>Estoque mínimo (un, opcional)</label><input name="minStock" type="number" step="any">
+      <button class="primary" type="submit">Cadastrar produto</button>
+    </form>
+  </div>
+  <div class="card"><h2>Produtos cadastrados</h2>
+    ${DB.products.length ? `<table><tr><th>Nome</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Estoque</th></tr>${rows}</table>` : '<div class="empty">Nenhum produto cadastrado.</div>'}
+  </div>`;
+}
+
+let recipeDraftItems = [];
+function renderFichas(){
+  if(!DB.products.length) return '<div class="card"><div class="empty">Cadastre um produto primeiro.</div></div>';
+  if(!DB.ingredients.length) return '<div class="card"><div class="empty">Cadastre ingredientes primeiro.</div></div>';
+  const prodOptions = DB.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  return `
+  <div class="card"><h2>Montar ficha técnica</h2>
+    <label>Produto</label><select id="fichaProduct">${prodOptions}</select>
+    <label>Rendimento (quantas unidades essa receita produz)</label>
+    <input id="fichaYield" type="number" step="any" value="1">
+    <div id="recipeItemsList" style="margin-top:10px;"></div>
+    <button class="secondary" id="addRecipeItem" type="button">+ Adicionar ingrediente</button>
+    <button class="primary" id="saveRecipeBtn" type="button" style="margin-top:10px;">Salvar ficha técnica</button>
+  </div>
+  <div class="card"><h2>Fichas técnicas cadastradas</h2>${renderRecipesList()}</div>`;
+}
+function renderRecipesList(){
+  const productIds = Object.keys(DB.recipes);
+  if(!productIds.length) return '<div class="empty">Nenhuma ficha técnica cadastrada.</div>';
+  return productIds.map(pid=>{
+    const p = getProduct(pid);
+    const r = getRecipeByProduct(pid);
+    if(!p || !r) return '';
+    const items = r.items.map(it=>{
+      const ing = getIngredient(it.ingredient_id);
+      return `<li>${ing?ing.name:'?'}: ${it.qty} ${it.unit}</li>`;
+    }).join('');
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+      <b>${p.name}</b> <span class="muted">(rende ${r.yield_qty} un)</span>
+      <ul style="margin:6px 0;padding-left:18px;font-size:13px;">${items}</ul>
+      <div class="muted">Custo por unidade: ${fmtBRL(recipeCostPerUnit(pid))}</div>
+    </div>`;
+  }).join('');
+}
+function renderRecipeItemRow(idx, item){
+  const ingOptions = DB.ingredients.map(i=>`<option value="${i.id}" ${item&&item.ingredientId===i.id?'selected':''}>${i.name}</option>`).join('');
+  return `<div class="recipe-item" data-idx="${idx}">
+    <select class="ri-ingredient">${ingOptions}</select>
+    <input class="ri-qty" type="number" step="any" placeholder="Qtd" value="${item?item.qty:''}">
+    <select class="ri-unit">
+      <option value="kg">kg</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option><option value="un">un</option>
+    </select>
+    <button type="button" class="danger ri-remove">✕</button>
+  </div>`;
+}
+function refreshRecipeItemsList(){
+  const container = document.getElementById('recipeItemsList');
+  if(!container) return;
+  container.innerHTML = recipeDraftItems.map((it,idx)=>renderRecipeItemRow(idx,it)).join('');
+  container.querySelectorAll('.ri-unit').forEach((sel,idx)=>{ if(recipeDraftItems[idx]) sel.value = recipeDraftItems[idx].unit || 'kg'; });
+  container.querySelectorAll('.ri-remove').forEach(btn=>{
+    btn.onclick = (e)=>{ recipeDraftItems.splice(+e.target.closest('.recipe-item').dataset.idx,1); refreshRecipeItemsList(); };
+  });
+}
+
+function renderProducao(){
+  const validProducts = DB.products.filter(p=>DB.recipes[p.id]);
+  if(!validProducts.length) return '<div class="card"><div class="empty">Cadastre uma ficha técnica primeiro.</div></div>';
+  const prodOptions = validProducts.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const rows = DB.productions.map(pr=>{
+    const p = getProduct(pr.product_id);
+    return `<tr><td>${fmtDate(pr.production_date)}</td><td>${p?p.name:'—'}</td><td>${pr.usable_qty} un</td><td>${fmtBRL(pr.unit_cost)}</td><td>${fmtBRL(pr.batch_cost)}</td></tr>`;
+  }).join('');
+  return `
+  <div class="card"><h2>Nova produção</h2>
+    <form id="form-producao">
+      <label>Produto</label><select name="productId" id="producaoProduct" required>${prodOptions}</select>
+      <label>Data</label><input name="date" type="date" value="${todayISO()}" required>
+      <div class="row">
+        <div><label>Quantidade produzida</label><input name="qtyProduced" type="number" step="any" required></div>
+        <div><label>Quantidade perdida</label><input name="qtyLost" type="number" step="any" value="0"></div>
+      </div>
+      <div id="producaoStockCheck" class="muted" style="margin:6px 0;"></div>
+      <button class="primary" type="submit">Confirmar produção</button>
+    </form>
+  </div>
+  <div class="card"><h2>Histórico de produção</h2>
+    ${DB.productions.length ? `<table><tr><th>Data</th><th>Produto</th><th>Unid.</th><th>Custo/un</th><th>Custo lote</th></tr>${rows}</table>` : '<div class="empty">Nenhuma produção registrada.</div>'}
+  </div>`;
+}
+
+function renderEstoque(){
+  const ingRows = DB.ingredients.map(i=>`<tr><td>${i.name}</td><td>${displayQty(Number(i.stock),i.family)}</td>
+    <td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td>
+    <td>${Number(i.min_stock)>0 && Number(i.stock)<Number(i.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td></tr>`).join('');
+  const prodRows = DB.products.map(p=>`<tr><td>${p.name}</td><td>${p.stock} un</td>
+    <td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td>
+    <td>${Number(p.min_stock)>0 && Number(p.stock)<Number(p.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td></tr>`).join('');
+  return `
+  <div class="card"><h2>Estoque de ingredientes</h2>
+    ${DB.ingredients.length ? `<table><tr><th>Item</th><th>Qtd</th><th>Valor</th><th>Status</th></tr>${ingRows}</table>` : '<div class="empty">Sem ingredientes.</div>'}
+  </div>
+  <div class="card"><h2>Estoque de produtos acabados</h2>
+    ${DB.products.length ? `<table><tr><th>Item</th><th>Qtd</th><th>Valor</th><th>Status</th></tr>${prodRows}</table>` : '<div class="empty">Sem produtos.</div>'}
+  </div>`;
+}
+
+let saleDraftLines = [];
+function renderVendas(){
+  const rows = DB.sales.map(s=>`<tr>
+    <td>${fmtDate(s.sale_date)}</td>
+    <td>${s.items.map(i=>(getProduct(i.product_id)?.name||'?')+' x'+i.qty).join(', ')}</td>
+    <td>${fmtBRL(s.total)}</td>
+    <td style="color:${Number(s.profit)>=0?'var(--good)':'var(--bad)'}">${fmtBRL(s.profit)}</td>
+    <td>${s.cancelled ? '<span class="badge low">Cancelada</span>' : `<button class="danger" data-cancel="${s.id}">Cancelar</button>`}</td>
+  </tr>`).join('');
+  return `
+  <div class="card"><h2>Nova venda</h2>
+    ${!DB.products.some(p=>p.stock>0) ? '<div class="empty">Nenhum produto com estoque disponível. Produza primeiro.</div>' : `
+    <div id="saleLinesList"></div>
+    <button class="secondary" id="addSaleLine" type="button">+ Adicionar item</button>
+    <label style="margin-top:10px;">Data</label><input id="saleDate" type="date" value="${todayISO()}">
+    <label>Desconto (R$, opcional)</label><input id="saleDiscount" type="number" step="any" value="0">
+    <div id="saleTotalPreview" class="muted" style="margin:8px 0;font-weight:600;"></div>
+    <button class="primary" id="confirmSaleBtn" type="button">Finalizar venda</button>
+    `}
+  </div>
+  <div class="card"><h2>Histórico de vendas</h2>
+    ${DB.sales.length ? `<table><tr><th>Data</th><th>Itens</th><th>Total</th><th>Lucro</th><th></th></tr>${rows}</table>` : '<div class="empty">Nenhuma venda registrada.</div>'}
+  </div>`;
+}
+function renderSaleLineRow(idx, line){
+  const opts = DB.products.filter(p=>p.stock>0).map(p=>`<option value="${p.id}" ${line&&line.productId===p.id?'selected':''}>${p.name} (estoque: ${p.stock})</option>`).join('');
+  return `<div class="sale-line" data-idx="${idx}">
+    <select class="sl-product">${opts}</select>
+    <input class="sl-qty" type="number" step="any" placeholder="Qtd" value="${line?line.qty:1}">
+    <input class="sl-price" type="number" step="any" placeholder="Preço un." value="${line?line.unitPrice:''}">
+    <button type="button" class="danger sl-remove">✕</button>
+  </div>`;
+}
+function refreshSaleLinesList(){
+  const container = document.getElementById('saleLinesList');
+  if(!container) return;
+  container.innerHTML = saleDraftLines.map((l,idx)=>renderSaleLineRow(idx,l)).join('');
+  container.querySelectorAll('.sl-remove').forEach(btn=>{
+    btn.onclick=(e)=>{ saleDraftLines.splice(+e.target.closest('.sale-line').dataset.idx,1); refreshSaleLinesList(); updateSaleTotalPreview(); };
+  });
+  container.querySelectorAll('.sl-product,.sl-qty,.sl-price').forEach(el=>{
+    el.addEventListener('input', updateSaleTotalPreview);
+    el.addEventListener('change', ()=>{
+      const row = el.closest('.sale-line');
+      const prodSel = row.querySelector('.sl-product');
+      const priceInput = row.querySelector('.sl-price');
+      const p = getProduct(prodSel.value);
+      if(p && !priceInput.value) priceInput.value = p.price;
+      updateSaleTotalPreview();
+    });
+  });
+}
+function collectSaleLines(){
+  const container = document.getElementById('saleLinesList');
+  if(!container) return [];
+  return [...container.querySelectorAll('.sale-line')].map(r=>({
+    productId: r.querySelector('.sl-product').value,
+    qty: parseFloat(r.querySelector('.sl-qty').value)||0,
+    unitPrice: parseFloat(r.querySelector('.sl-price').value)||0
+  })).filter(l=>l.productId && l.qty>0);
+}
+function updateSaleTotalPreview(){
+  const lines = collectSaleLines();
+  const discount = parseFloat(document.getElementById('saleDiscount')?.value)||0;
+  const total = lines.reduce((a,l)=>a+l.qty*l.unitPrice,0) - discount;
+  const el = document.getElementById('saleTotalPreview');
+  if(el) el.textContent = 'Total da venda: ' + fmtBRL(total);
+}
+
+// ===================== HANDLERS =====================
+function attachHandlers(){
+  document.querySelectorAll('#nav button').forEach(btn=>{
+    btn.onclick = ()=>{
+      activeTab = btn.dataset.tab;
+      document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      recipeDraftItems = []; saleDraftLines = [];
+      render();
+    };
+  });
+
+  const fi = document.getElementById('form-ingrediente');
+  if(fi) fi.onsubmit = async (e)=>{
+    e.preventDefault();
+    const f = new FormData(fi);
+    await registerIngredient(f.get('name'), f.get('unit'), parseFloat(f.get('minStock'))||0);
+    toast('Ingrediente cadastrado!'); render();
+  };
+
+  const fc = document.getElementById('form-compra');
+  if(fc) fc.onsubmit = async (e)=>{
+    e.preventDefault();
+    const f = new FormData(fc);
+    await registerPurchase(f.get('ingredientId'), f.get('date'), parseFloat(f.get('qty')), f.get('unit'), parseFloat(f.get('totalCost')));
+    toast('Compra registrada! Estoque e custo médio atualizados.'); render();
+  };
+
+  const fp = document.getElementById('form-produto');
+  if(fp) fp.onsubmit = async (e)=>{
+    e.preventDefault();
+    const f = new FormData(fp);
+    await registerProduct(f.get('name'), parseFloat(f.get('price')), parseFloat(f.get('minStock'))||0);
+    toast('Produto cadastrado!'); render();
+  };
+
+  const addRi = document.getElementById('addRecipeItem');
+  if(addRi){
+    if(!recipeDraftItems.length) recipeDraftItems.push({ingredientId:DB.ingredients[0]?.id,qty:'',unit:'kg'});
+    refreshRecipeItemsList();
+    addRi.onclick = ()=>{ recipeDraftItems.push({ingredientId:DB.ingredients[0]?.id,qty:'',unit:'kg'}); refreshRecipeItemsList(); };
+  }
+  const saveRecipeBtn = document.getElementById('saveRecipeBtn');
+  if(saveRecipeBtn) saveRecipeBtn.onclick = async ()=>{
+    const productId = document.getElementById('fichaProduct').value;
+    const yieldQty = parseFloat(document.getElementById('fichaYield').value)||1;
+    const rows = [...document.getElementById('recipeItemsList').querySelectorAll('.recipe-item')];
+    const items = rows.map(r=>({
+      ingredientId: r.querySelector('.ri-ingredient').value,
+      qty: parseFloat(r.querySelector('.ri-qty').value)||0,
+      unit: r.querySelector('.ri-unit').value
+    })).filter(it=>it.qty>0);
+    if(!items.length){ toast('Adicione ao menos um ingrediente.'); return; }
+    await saveRecipe(productId, items, yieldQty);
+    toast('Ficha técnica salva!'); recipeDraftItems = []; render();
+  };
+
+  const fpr = document.getElementById('form-producao');
+  if(fpr){
+    const checkStock = ()=>{
+      const productId = document.getElementById('producaoProduct').value;
+      const qtyProduced = parseFloat(fpr.querySelector('[name=qtyProduced]').value)||0;
+      const el = document.getElementById('producaoStockCheck');
+      if(!qtyProduced){ el.textContent=''; return; }
+      const check = checkStockForProduction(productId, qtyProduced);
+      el.innerHTML = check.ok ? '<span style="color:var(--good)">✓ Estoque suficiente</span>'
+        : '<span style="color:var(--bad)">⚠ Faltam: '+check.missing.map(m=>m.name+' ('+displayQty(m.need-m.have,m.family)+' faltando)').join(', ')+'</span>';
+    };
+    fpr.querySelector('[name=qtyProduced]').addEventListener('input', checkStock);
+    document.getElementById('producaoProduct').addEventListener('change', checkStock);
+    fpr.onsubmit = async (e)=>{
+      e.preventDefault();
+      const f = new FormData(fpr);
+      const productId = f.get('productId');
+      const qtyProduced = parseFloat(f.get('qtyProduced'));
+      const qtyLost = parseFloat(f.get('qtyLost'))||0;
+      const result = await registerProduction(productId, f.get('date'), qtyProduced, qtyLost, false);
+      if(!result.ok){
+        if(result.missing && confirm(result.msg + '\n\nDeseja confirmar mesmo assim (estoque ficará zerado)?')){
+          await registerProduction(productId, f.get('date'), qtyProduced, qtyLost, true);
+          toast('Produção registrada (com estoque forçado).'); render();
+        } else if(!result.missing){ toast(result.msg); }
+        return;
+      }
+      toast('Produção registrada! Estoque atualizado.'); render();
+    };
+  }
+
+  const addSl = document.getElementById('addSaleLine');
+  if(addSl){
+    if(!saleDraftLines.length){
+      const firstProd = DB.products.find(p=>p.stock>0);
+      saleDraftLines.push({productId:firstProd?firstProd.id:null, qty:1, unitPrice: firstProd?firstProd.price:''});
+    }
+    refreshSaleLinesList(); updateSaleTotalPreview();
+    addSl.onclick = ()=>{
+      const firstProd = DB.products.find(p=>p.stock>0);
+      saleDraftLines.push({productId:firstProd?firstProd.id:null, qty:1, unitPrice: firstProd?firstProd.price:''});
+      refreshSaleLinesList(); updateSaleTotalPreview();
+    };
+    document.getElementById('saleDiscount').addEventListener('input', updateSaleTotalPreview);
+  }
+  const confirmSaleBtn = document.getElementById('confirmSaleBtn');
+  if(confirmSaleBtn) confirmSaleBtn.onclick = async ()=>{
+    const lines = collectSaleLines();
+    if(!lines.length){ toast('Adicione ao menos um item.'); return; }
+    const discount = parseFloat(document.getElementById('saleDiscount').value)||0;
+    const date = document.getElementById('saleDate').value || todayISO();
+    const result = await registerSale(lines, date, discount);
+    if(!result.ok){ toast(result.msg); return; }
+    toast('Venda registrada!'); saleDraftLines = []; render();
+  };
+
+  document.querySelectorAll('[data-cancel]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      if(confirm('Cancelar esta venda? O estoque será devolvido.')){
+        await cancelSale(btn.dataset.cancel);
+        toast('Venda cancelada e estoque revertido.'); render();
+      }
+    };
+  });
+}
+
+// ===================== BOOT =====================
+async function boot(){
+  if(booted) return;
+  booted = true;
+  await loadAll();
+  render();
+}
+
+// check existing session on load
+supabase.auth.getSession().then(({data:{session}})=>{
+  if(session){
+    document.getElementById('authScreen').style.display='none';
+    document.getElementById('appRoot').style.display='block';
+    boot();
+  }
+});
+</script>
+</body>
+</html>

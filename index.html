@@ -781,6 +781,7 @@ function renderPurchaseItemRow(idx, item){
 function refreshPurchaseItemsList(){
   const container = document.getElementById('purchaseItemsList');
   if(!container) return;
+  syncPurchaseDraftFromDom();
   container.innerHTML = purchaseDraftItems.map((item,idx)=>renderPurchaseItemRow(idx,item)).join('');
   container.querySelectorAll('.pi-remove').forEach(btn=>{
     btn.onclick = e=>{
@@ -804,6 +805,18 @@ function refreshPurchaseItemsList(){
     updatePurchaseItemsSum();
   }));
   updatePurchaseItemsSum();
+}
+function syncPurchaseDraftFromDom(){
+  const rows = [...document.querySelectorAll('#purchaseItemsList .purchase-item')];
+  if(!rows.length) return;
+  purchaseDraftItems = rows.map(row=>({
+    ingredientId:row.querySelector('.pi-ingredient')?.value,
+    purchaseQty:row.querySelector('.pi-purchase-qty')?.value || '',
+    purchaseUnit:row.querySelector('.pi-purchase-unit')?.value || 'pacote',
+    contentQty:row.querySelector('.pi-content-qty')?.value || 1,
+    contentUnit:row.querySelector('.pi-content-unit')?.value || 'un',
+    totalCost:row.querySelector('.pi-total')?.value || ''
+  }));
 }
 function updatePurchaseItemsSum(){
   const sum = [...document.querySelectorAll('#purchaseItemsList .pi-total')].reduce((total,input)=>total+(Number(input.value)||0),0);
@@ -1173,6 +1186,7 @@ function attachHandlers(){
   });
   const addIngredientFromPurchase = document.getElementById('addIngredientFromPurchase');
   if(addIngredientFromPurchase) addIngredientFromPurchase.onclick = async ()=>{
+    syncPurchaseDraftFromDom();
     const name = prompt('Nome do ingrediente ou insumo:');
     if(!name?.trim()) return;
     const unit = prompt('Unidade: kg, g, l, ml ou un','un')?.trim().toLowerCase();
@@ -1215,6 +1229,7 @@ function attachHandlers(){
     }
     refreshPurchaseItemsList();
     addPurchaseItem.onclick = ()=>{
+      syncPurchaseDraftFromDom();
       const firstIngredient = DB.ingredients[0];
       purchaseDraftItems.push({ingredientId:firstIngredient?.id, purchaseQty:'', purchaseUnit:'pacote', contentQty:1, contentUnit:firstIngredient?.unit||'un', totalCost:''});
       refreshPurchaseItemsList();

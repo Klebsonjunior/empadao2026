@@ -843,7 +843,7 @@ function renderCompras(){
       <label>Itens da compra</label>
       <div id="purchaseItemsList"></div>
       <button class="secondary" id="addPurchaseItem" type="button">+ Adicionar item</button>
-      <button class="secondary" id="addIngredientFromPurchase" type="button">+ Cadastrar ingrediente nesta compra</button>
+      <button class="secondary" id="addIngredientFromPurchase" type="button">+ Cadastrar item</button>
       <div class="row" style="margin-top:8px;">
         <div><label>Valor total da compra (R$)</label><input id="purchaseTotal" name="totalCost" type="number" min="0" step="0.01" placeholder="300,00" required></div>
         <div id="purchaseItemsSum" class="summary-note" style="align-self:end;">Soma dos itens: R$ 0,00</div>
@@ -1179,7 +1179,8 @@ function attachHandlers(){
     if(!UNIT_FAMILY[unit]){ toast('Unidade inválida. Use kg, g, l, ml ou un.'); return; }
     const result = await registerIngredient(name, unit, 0);
     if(!result.ok){ toast('Erro: '+result.msg); return; }
-    toast('Ingrediente criado. Ele já pode ser selecionado na compra.'); render();
+    purchaseDraftItems.push({ingredientId:result.data.id,purchaseQty:1,purchaseUnit:'pacote',contentQty:1,contentUnit:unit,totalCost:''});
+    toast('Item cadastrado e adicionado à compra.'); render();
   };
   const openReports = document.getElementById('openReports');
   if(openReports) openReports.onclick = ()=>{

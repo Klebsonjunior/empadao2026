@@ -17,4 +17,6 @@ Abra a URL, clique em "Criar conta", cadastre seu e-mail e senha. Se o Supabase 
 
 ## Banco de dados
 
-Projeto Supabase: `kriartlove` (ref: `hfeotdvlrmxvlecybmyc`). Tabelas: `ingredients`, `purchases`, `products`, `recipes`, `recipe_items`, `production_batches`, `inventory_movements`, `sales`, `sale_items`, `suppliers`. RLS ativo — só usuário autenticado lê/escreve.
+Projeto Supabase: `kriartlove` (ref: `hfeotdvlrmxvlecybmyc`). O esquema está versionado em [`supabase/001_empadao_schema.sql`](supabase/001_empadao_schema.sql) e contém as tabelas `ingredients`, `purchases`, `products`, `recipes`, `recipe_items`, `production_batches`, `inventory_movements`, `sales`, `sale_items` e `suppliers`. RLS ativo — somente o usuário autenticado acessa os próprios registros.
+
+A migração `empadao_schema` já foi aplicada ao projeto configurado. Em uma nova instalação, aplique esse arquivo no SQL Editor do projeto antes do primeiro acesso. O aplicativo também valida cada resposta do Supabase e só exibe mensagens de sucesso depois que a persistência e o recarregamento dos dados são confirmados.

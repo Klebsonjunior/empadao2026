@@ -131,6 +131,15 @@ function toast(msg){
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2400);
 }
+function errorMessage(error, fallback='Não foi possível concluir a operação.'){
+  if(!error) return fallback;
+  if(error.code==='42501') return 'Sem permissão para salvar estes dados. Faça login novamente.';
+  if(error.code==='PGRST205') return 'A estrutura do banco não está disponível. Verifique a migração do Supabase.';
+  return error.message || fallback;
+}
+function failedResult(error, fallback){
+  return {ok:false, msg:errorMessage(error, fallback), error};
+}
 
 const UNIT_FAMILY = {kg:'peso', g:'peso', l:'volume', ml:'volume', un:'unidade'};
 const TO_BASE = {kg:1000, g:1, l:1000, ml:1, un:1};
@@ -221,6 +230,13 @@ async function loadAll(){
     supabase.from('sales').select('*').order('sale_date',{ascending:false}),
     supabase.from('sale_items').select('*')
   ]);
+  const failed = [ing, pur, prod, rec, ri, pb, sales, saleItems].find(response=>response.error);
+  if(failed){
+    console.error('Erro ao carregar dados do Supabase:', failed.error);
+    const result = failedResult(failed.error, 'Não foi possível carregar os dados.');
+    toast('Erro: '+result.msg);
+    return result;
+  }
   DB.ingredients = ing.data || [];
   DB.purchases = pur.data || [];
   DB.products = prod.data || [];
@@ -240,6 +256,7 @@ async function loadAll(){
     itemsBySale[it.sale_id].push(it);
   });
   DB.sales = (sales.data||[]).map(s=>({...s, items: itemsBySale[s.id]||[]}));
+  return {ok:true};
 }
 
 function getIngredient(id){ return DB.ingredients.find(i=>i.id===id); }
@@ -262,67 +279,102 @@ function recipeCostPerUnit(productId){
 }
 
 async function registerIngredient(name, unit, minStockInput){
+  const cleanName = String(name||'').trim();
   const family = UNIT_FAMILY[unit];
+  const minStock = Number(minStockInput)||0;
+  if(!cleanName) return failedResult({message:'Informe o nome do ingrediente.'});
+  if(!family) return failedResult({message:'Selecione uma unidade válida.'});
+  if(minStock<0) return failedResult({message:'O estoque mínimo não pode ser negativo.'});
+
   const {data, error} = await supabase.from('ingredients').insert({
-    name, family, unit, stock:0, avg_cost:0,
-    min_stock: convertToBase(minStockInput||0, unit)
+    name:cleanName, family, unit, stock:0, avg_cost:0,
+    min_stock: convertToBase(minStock, unit)
   }).select().single();
-  if(error){ toast('Erro: '+error.message); return; }
-  DB.ingredients.push(data);
+  if(error) return failedResult(error, 'Não foi possível cadastrar o ingrediente.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true, data} : loaded;
 }
 
 async function registerPurchase(ingredientId, date, qty, unit, totalCost){
   const ing = getIngredient(ingredientId);
-  if(!ing) return;
-  const qtyBase = convertToBase(qty, unit);
-  const costPerBase = totalCost / qtyBase;
+  const quantity = Number(qty);
+  const cost = Number(totalCost);
+  if(!ing) return failedResult({message:'Selecione um ingrediente válido.'});
+  if(!date) return failedResult({message:'Informe a data da compra.'});
+  if(!UNIT_FAMILY[unit] || UNIT_FAMILY[unit]!==ing.family) return failedResult({message:'A unidade da compra deve pertencer à mesma família do ingrediente.'});
+  if(!(quantity>0)) return failedResult({message:'Informe uma quantidade maior que zero.'});
+  if(!(cost>=0)) return failedResult({message:'Informe um valor total válido.'});
+
+  const qtyBase = convertToBase(quantity, unit);
+  const costPerBase = cost / qtyBase;
   const oldStock = Number(ing.stock), oldAvg = Number(ing.avg_cost);
   const newStock = oldStock + qtyBase;
   const newAvg = newStock>0 ? ((oldStock*oldAvg)+(qtyBase*costPerBase))/newStock : costPerBase;
 
   const {error: pErr} = await supabase.from('purchases').insert({
-    ingredient_id: ingredientId, purchase_date: date, qty, unit, qty_base: qtyBase,
-    total_cost: totalCost, cost_per_base: costPerBase,
+    ingredient_id: ingredientId, purchase_date: date, qty:quantity, unit, qty_base: qtyBase,
+    total_cost: cost, cost_per_base: costPerBase,
     avg_cost_before: oldAvg, avg_cost_after: newAvg
   });
-  if(pErr){ toast('Erro: '+pErr.message); return; }
+  if(pErr) return failedResult(pErr, 'Não foi possível registrar a compra.');
 
   const {error: iErr} = await supabase.from('ingredients').update({
     stock: newStock, avg_cost: newAvg, updated_at: new Date().toISOString()
   }).eq('id', ingredientId);
-  if(iErr){ toast('Erro: '+iErr.message); return; }
+  if(iErr) return failedResult(iErr, 'A compra foi salva, mas o estoque não pôde ser atualizado.');
 
-  await supabase.from('inventory_movements').insert({
+  const {error: mErr} = await supabase.from('inventory_movements').insert({
     item_type:'ingredient', item_id: ingredientId, movement_type:'compra',
     qty_before: oldStock, qty_change: qtyBase, qty_after: newStock, note: 'Compra em '+date
   });
+  if(mErr) return failedResult(mErr, 'A compra e o estoque foram salvos, mas o histórico não pôde ser atualizado.');
 
-  await loadAll();
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
 }
 
 async function registerProduct(name, price, minStock){
+  const cleanName = String(name||'').trim();
+  const salePrice = Number(price);
+  const minimum = Number(minStock)||0;
+  if(!cleanName) return failedResult({message:'Informe o nome do produto.'});
+  if(!(salePrice>=0)) return failedResult({message:'Informe um preço de venda válido.'});
+  if(minimum<0) return failedResult({message:'O estoque mínimo não pode ser negativo.'});
+
   const {data, error} = await supabase.from('products').insert({
-    name, price, stock:0, min_stock: minStock||0, last_unit_cost:0
+    name:cleanName, price:salePrice, stock:0, min_stock: minimum, last_unit_cost:0
   }).select().single();
-  if(error){ toast('Erro: '+error.message); return; }
-  DB.products.push(data);
+  if(error) return failedResult(error, 'Não foi possível cadastrar o produto.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true, data} : loaded;
 }
 
 async function saveRecipe(productId, items, yieldQty){
+  const product = getProduct(productId);
+  const rendimento = Number(yieldQty);
+  if(!product) return failedResult({message:'Selecione um produto válido.'});
+  if(!(rendimento>0)) return failedResult({message:'O rendimento deve ser maior que zero.'});
+  if(!Array.isArray(items) || !items.length) return failedResult({message:'Adicione ao menos um ingrediente.'});
+  if(items.some(it=>!getIngredient(it.ingredientId) || !(Number(it.qty)>0) || !UNIT_FAMILY[it.unit])){
+    return failedResult({message:'Revise os ingredientes, quantidades e unidades da ficha.'});
+  }
+
   let recipe = DB.recipes[productId];
   if(!recipe){
-    const {data, error} = await supabase.from('recipes').insert({product_id: productId, yield_qty: yieldQty}).select().single();
-    if(error){ toast('Erro: '+error.message); return; }
+    const {data, error} = await supabase.from('recipes').insert({product_id: productId, yield_qty: rendimento}).select().single();
+    if(error) return failedResult(error, 'Não foi possível criar a ficha técnica.');
     recipe = data;
   } else {
-    const {error} = await supabase.from('recipes').update({yield_qty: yieldQty, updated_at: new Date().toISOString()}).eq('id', recipe.id);
-    if(error){ toast('Erro: '+error.message); return; }
-    await supabase.from('recipe_items').delete().eq('recipe_id', recipe.id);
+    const {error} = await supabase.from('recipes').update({yield_qty: rendimento, updated_at: new Date().toISOString()}).eq('id', recipe.id);
+    if(error) return failedResult(error, 'Não foi possível atualizar a ficha técnica.');
+    const {error: deleteError} = await supabase.from('recipe_items').delete().eq('recipe_id', recipe.id);
+    if(deleteError) return failedResult(deleteError, 'Não foi possível substituir os ingredientes da ficha.');
   }
-  const rows = items.map(it=>({recipe_id: recipe.id, ingredient_id: it.ingredientId, qty: it.qty, unit: it.unit}));
+  const rows = items.map(it=>({recipe_id: recipe.id, ingredient_id: it.ingredientId, qty:Number(it.qty), unit:it.unit}));
   const {error: riErr} = await supabase.from('recipe_items').insert(rows);
-  if(riErr){ toast('Erro: '+riErr.message); return; }
-  await loadAll();
+  if(riErr) return failedResult(riErr, 'Não foi possível salvar os ingredientes da ficha.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
 }
 
 function checkStockForProduction(productId, qtyProduced){
@@ -343,11 +395,15 @@ function checkStockForProduction(productId, qtyProduced){
 async function registerProduction(productId, date, qtyProduced, qtyLost, force){
   const r = getRecipeByProduct(productId);
   const product = getProduct(productId);
+  const produced = Number(qtyProduced);
+  const lost = Number(qtyLost)||0;
   if(!r || !product) return {ok:false, msg:'Produto sem ficha técnica.'};
-  const check = checkStockForProduction(productId, qtyProduced);
+  if(!date || !(produced>0)) return {ok:false, msg:'Informe uma data e uma quantidade produzida maior que zero.'};
+  if(lost<0 || lost>produced) return {ok:false, msg:'A perda deve estar entre zero e a quantidade produzida.'};
+  const check = checkStockForProduction(productId, produced);
   if(!check.ok && !force) return {ok:false, msg:'Estoque insuficiente de: '+check.missing.map(m=>m.name).join(', '), missing:check.missing};
 
-  const scale = qtyProduced / r.yield_qty;
+  const scale = produced / r.yield_qty;
   let batchCost = 0;
   const ingredientUpdates = [];
   for(const it of r.items){
@@ -359,93 +415,118 @@ async function registerProduction(productId, date, qtyProduced, qtyLost, force){
     const after = Math.max(before - needBase, 0);
     ingredientUpdates.push({id: ing.id, before, after, change: -needBase});
   }
-  const usable = Math.max(qtyProduced - (qtyLost||0), 0);
+  const usable = Math.max(produced - lost, 0);
   const unitCost = usable>0 ? batchCost/usable : 0;
 
   const {data: batch, error: bErr} = await supabase.from('production_batches').insert({
-    product_id: productId, production_date: date, qty_planned: qtyProduced,
-    qty_produced: qtyProduced, qty_lost: qtyLost||0, usable_qty: usable,
+    product_id: productId, production_date: date, qty_planned: produced,
+    qty_produced: produced, qty_lost: lost, usable_qty: usable,
     batch_cost: batchCost, unit_cost: unitCost, forced: !check.ok
   }).select().single();
-  if(bErr) return {ok:false, msg: bErr.message};
+  if(bErr) return failedResult(bErr, 'Não foi possível registrar a produção.');
 
   for(const u of ingredientUpdates){
-    await supabase.from('ingredients').update({stock: u.after, updated_at: new Date().toISOString()}).eq('id', u.id);
-    await supabase.from('inventory_movements').insert({
+    const {error: ingredientError} = await supabase.from('ingredients').update({stock: u.after, updated_at: new Date().toISOString()}).eq('id', u.id);
+    if(ingredientError) return failedResult(ingredientError, 'A produção foi salva, mas um ingrediente não pôde ser atualizado.');
+    const {error: movementError} = await supabase.from('inventory_movements').insert({
       item_type:'ingredient', item_id: u.id, movement_type:'producao_saida',
       qty_before: u.before, qty_change: u.change, qty_after: u.after, origin_id: batch.id
     });
+    if(movementError) return failedResult(movementError, 'A produção foi salva, mas o histórico do estoque não pôde ser atualizado.');
   }
 
   const prodBefore = Number(product.stock);
   const prodAfter = prodBefore + usable;
-  await supabase.from('products').update({stock: prodAfter, last_unit_cost: unitCost, updated_at: new Date().toISOString()}).eq('id', productId);
-  await supabase.from('inventory_movements').insert({
+  const {error: productError} = await supabase.from('products').update({stock: prodAfter, last_unit_cost: unitCost, updated_at: new Date().toISOString()}).eq('id', productId);
+  if(productError) return failedResult(productError, 'A produção foi salva, mas o estoque do produto não pôde ser atualizado.');
+  const {error: productMovementError} = await supabase.from('inventory_movements').insert({
     item_type:'product', item_id: productId, movement_type:'producao_entrada',
     qty_before: prodBefore, qty_change: usable, qty_after: prodAfter, origin_id: batch.id
   });
+  if(productMovementError) return failedResult(productMovementError, 'A produção foi salva, mas o histórico do produto não pôde ser atualizado.');
 
-  await loadAll();
-  return {ok:true};
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
 }
 
 async function registerSale(lines, date, discount){
-  for(const l of lines){
+  const saleLines = Array.isArray(lines) ? lines : [];
+  const saleDiscount = Number(discount)||0;
+  if(!saleLines.length) return {ok:false, msg:'Adicione ao menos um item.'};
+  if(!date) return {ok:false, msg:'Informe a data da venda.'};
+  if(saleDiscount<0) return {ok:false, msg:'O desconto não pode ser negativo.'};
+
+  const quantities = {};
+  for(const l of saleLines){
     const p = getProduct(l.productId);
-    if(!p || Number(p.stock) < l.qty) return {ok:false, msg:'Estoque insuficiente para '+(p?p.name:'produto')};
+    const quantity = Number(l.qty);
+    if(!p || !(quantity>0)) return {ok:false, msg:'Selecione produtos e quantidades válidas.'};
+    quantities[l.productId] = (quantities[l.productId]||0) + quantity;
+    if(Number(p.stock) < quantities[l.productId]) return {ok:false, msg:'Estoque insuficiente para '+p.name};
   }
-  let total=0, cost=0;
+  let grossTotal=0, cost=0;
   const itemsToInsert = [];
-  for(const l of lines){
+  for(const l of saleLines){
     const p = getProduct(l.productId);
-    const subtotal = l.qty*l.unitPrice;
-    const costLine = l.qty*Number(p.last_unit_cost);
-    total += subtotal; cost += costLine;
-    itemsToInsert.push({productId:l.productId, qty:l.qty, unitPrice:l.unitPrice, costUnit:Number(p.last_unit_cost), subtotal, costLine});
+    const unitPrice = Number(l.unitPrice);
+    if(!(unitPrice>=0)) return {ok:false, msg:'Informe preços válidos para os produtos.'};
+    const subtotal = Number(l.qty)*unitPrice;
+    const costLine = Number(l.qty)*Number(p.last_unit_cost);
+    grossTotal += subtotal; cost += costLine;
+    itemsToInsert.push({productId:l.productId, qty:Number(l.qty), unitPrice, costUnit:Number(p.last_unit_cost), subtotal, costLine});
   }
-  total -= (discount||0);
+  if(saleDiscount>grossTotal) return {ok:false, msg:'O desconto não pode ser maior que o total da venda.'};
+  const total = grossTotal - saleDiscount;
 
   const {data: sale, error: sErr} = await supabase.from('sales').insert({
-    sale_date: date, discount: discount||0, total, cost, profit: total-cost
+    sale_date: date, discount: saleDiscount, total, cost, profit: total-cost
   }).select().single();
-  if(sErr) return {ok:false, msg: sErr.message};
+  if(sErr) return failedResult(sErr, 'Não foi possível registrar a venda.');
 
   const rows = itemsToInsert.map(it=>({
     sale_id: sale.id, product_id: it.productId, qty: it.qty, unit_price: it.unitPrice,
     cost_unit: it.costUnit, subtotal: it.subtotal, cost_line: it.costLine
   }));
-  await supabase.from('sale_items').insert(rows);
+  const {error: saleItemsError} = await supabase.from('sale_items').insert(rows);
+  if(saleItemsError) return failedResult(saleItemsError, 'A venda foi criada, mas seus itens não puderam ser salvos.');
 
   for(const it of itemsToInsert){
     const p = getProduct(it.productId);
     const before = Number(p.stock);
     const after = before - it.qty;
-    await supabase.from('products').update({stock: after, updated_at: new Date().toISOString()}).eq('id', it.productId);
-    await supabase.from('inventory_movements').insert({
+    const {error: productError} = await supabase.from('products').update({stock: after, updated_at: new Date().toISOString()}).eq('id', it.productId);
+    if(productError) return failedResult(productError, 'A venda foi salva, mas o estoque do produto não pôde ser atualizado.');
+    const {error: movementError} = await supabase.from('inventory_movements').insert({
       item_type:'product', item_id: it.productId, movement_type:'venda',
       qty_before: before, qty_change: -it.qty, qty_after: after, origin_id: sale.id
     });
+    if(movementError) return failedResult(movementError, 'A venda foi salva, mas o histórico do estoque não pôde ser atualizado.');
   }
-  await loadAll();
-  return {ok:true};
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
 }
 
 async function cancelSale(saleId){
   const sale = DB.sales.find(s=>s.id===saleId);
-  if(!sale || sale.cancelled) return;
+  if(!sale) return failedResult({message:'Venda não encontrada.'});
+  if(sale.cancelled) return failedResult({message:'Esta venda já está cancelada.'});
   for(const it of sale.items){
     const p = getProduct(it.product_id);
     if(!p) continue;
     const before = Number(p.stock);
     const after = before + Number(it.qty);
-    await supabase.from('products').update({stock: after, updated_at: new Date().toISOString()}).eq('id', it.product_id);
-    await supabase.from('inventory_movements').insert({
+    const {error: productError} = await supabase.from('products').update({stock: after, updated_at: new Date().toISOString()}).eq('id', it.product_id);
+    if(productError) return failedResult(productError, 'O estoque não pôde ser revertido.');
+    const {error: movementError} = await supabase.from('inventory_movements').insert({
       item_type:'product', item_id: it.product_id, movement_type:'cancelamento',
       qty_before: before, qty_change: Number(it.qty), qty_after: after, origin_id: saleId
     });
+    if(movementError) return failedResult(movementError, 'O estoque foi revertido, mas o histórico não pôde ser atualizado.');
   }
-  await supabase.from('sales').update({cancelled:true, cancelled_at: new Date().toISOString()}).eq('id', saleId);
-  await loadAll();
+  const {error: saleError} = await supabase.from('sales').update({cancelled:true, cancelled_at: new Date().toISOString()}).eq('id', saleId);
+  if(saleError) return failedResult(saleError, 'A venda não pôde ser cancelada.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
 }
 
 // ===================== METRICS =====================
@@ -788,7 +869,8 @@ function attachHandlers(){
   if(fi) fi.onsubmit = async (e)=>{
     e.preventDefault();
     const f = new FormData(fi);
-    await registerIngredient(f.get('name'), f.get('unit'), parseFloat(f.get('minStock'))||0);
+    const result = await registerIngredient(f.get('name'), f.get('unit'), parseFloat(f.get('minStock'))||0);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
     toast('Ingrediente cadastrado!'); render();
   };
 
@@ -796,7 +878,8 @@ function attachHandlers(){
   if(fc) fc.onsubmit = async (e)=>{
     e.preventDefault();
     const f = new FormData(fc);
-    await registerPurchase(f.get('ingredientId'), f.get('date'), parseFloat(f.get('qty')), f.get('unit'), parseFloat(f.get('totalCost')));
+    const result = await registerPurchase(f.get('ingredientId'), f.get('date'), parseFloat(f.get('qty')), f.get('unit'), parseFloat(f.get('totalCost')));
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
     toast('Compra registrada! Estoque e custo médio atualizados.'); render();
   };
 
@@ -804,7 +887,8 @@ function attachHandlers(){
   if(fp) fp.onsubmit = async (e)=>{
     e.preventDefault();
     const f = new FormData(fp);
-    await registerProduct(f.get('name'), parseFloat(f.get('price')), parseFloat(f.get('minStock'))||0);
+    const result = await registerProduct(f.get('name'), parseFloat(f.get('price')), parseFloat(f.get('minStock'))||0);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
     toast('Produto cadastrado!'); render();
   };
 
@@ -825,7 +909,8 @@ function attachHandlers(){
       unit: r.querySelector('.ri-unit').value
     })).filter(it=>it.qty>0);
     if(!items.length){ toast('Adicione ao menos um ingrediente.'); return; }
-    await saveRecipe(productId, items, yieldQty);
+    const result = await saveRecipe(productId, items, yieldQty);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
     toast('Ficha técnica salva!'); recipeDraftItems = []; render();
   };
 
@@ -851,9 +936,10 @@ function attachHandlers(){
       const result = await registerProduction(productId, f.get('date'), qtyProduced, qtyLost, false);
       if(!result.ok){
         if(result.missing && confirm(result.msg + '\n\nDeseja confirmar mesmo assim (estoque ficará zerado)?')){
-          await registerProduction(productId, f.get('date'), qtyProduced, qtyLost, true);
+          const forcedResult = await registerProduction(productId, f.get('date'), qtyProduced, qtyLost, true);
+          if(!forcedResult.ok){ toast('Erro: '+forcedResult.msg); return; }
           toast('Produção registrada (com estoque forçado).'); render();
-        } else if(!result.missing){ toast(result.msg); }
+        } else if(!result.missing){ toast('Erro: '+result.msg); }
         return;
       }
       toast('Produção registrada! Estoque atualizado.'); render();
@@ -888,7 +974,8 @@ function attachHandlers(){
   document.querySelectorAll('[data-cancel]').forEach(btn=>{
     btn.onclick = async ()=>{
       if(confirm('Cancelar esta venda? O estoque será devolvido.')){
-        await cancelSale(btn.dataset.cancel);
+        const result = await cancelSale(btn.dataset.cancel);
+        if(!result.ok){ toast('Erro: '+result.msg); return; }
         toast('Venda cancelada e estoque revertido.'); render();
       }
     };

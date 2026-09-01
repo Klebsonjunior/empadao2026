@@ -658,6 +658,7 @@ function renderTab(tab){
 function renderDashboard(){
   const m = metrics();
   return `
+  <div class="card report-access-card"><div><h2>Relatórios</h2><div class="muted">Gere relatórios financeiros e operacionais por período.</div></div><button class="primary report-access-button" type="button" id="openReports">Abrir relatórios</button></div>
   <div class="grid">
     <div class="kpi"><div class="label">Faturamento hoje</div><div class="value">${fmtBRL(m.faturamentoHoje)}</div></div>
     <div class="kpi"><div class="label">Faturamento mês</div><div class="value">${fmtBRL(m.faturamentoMes)}</div></div>
@@ -1103,6 +1104,12 @@ function updateSaleTotalPreview(){
 
 // ===================== HANDLERS =====================
 function attachHandlers(){
+  const openReports = document.getElementById('openReports');
+  if(openReports) openReports.onclick = ()=>{
+    activeTab = 'relatorios';
+    document.querySelectorAll('#nav button').forEach(btn=>btn.classList.toggle('active', btn.dataset.tab==='relatorios'));
+    render();
+  };
   document.querySelectorAll('#nav button').forEach(btn=>{
     btn.onclick = ()=>{
       activeTab = btn.dataset.tab;

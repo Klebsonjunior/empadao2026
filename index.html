@@ -859,7 +859,7 @@ function renderCompras(){
       <label>Mercado / fornecedor / local</label><input name="supplierName" required placeholder="Ex: Atacadão, Casa das Embalagens">
       <label>Itens da compra</label>
       <div id="purchaseItemsList"></div>
-      <button class="secondary" id="addPurchaseItem" type="button">+ Adicionar item cadastrado</button>
+      <button class="secondary" id="addPurchaseItem" type="button" data-action="add-purchase-item">+ Adicionar outra linha</button>
       <button class="secondary" id="addIngredientFromPurchase" type="button">+ Cadastrar item</button>
       <div class="row" style="margin-top:8px;">
         <div><label>Valor total da compra (R$)</label><input id="purchaseTotal" name="totalCost" type="number" min="0" step="0.01" placeholder="300,00" required></div>
@@ -1232,7 +1232,8 @@ function attachHandlers(){
       purchaseDraftItems.push({ingredientId:firstIngredient?.id, purchaseQty:'', purchaseUnit:'pacote', contentQty:1, contentUnit:firstIngredient?.unit||'un', totalCost:''});
     }
     refreshPurchaseItemsList();
-    addPurchaseItem.onclick = ()=>{
+    addPurchaseItem.onclick = (event)=>{
+      event.preventDefault();
       syncPurchaseDraftFromDom();
       purchaseDraftItems.push({ingredientId:'',purchaseQty:'',purchaseUnit:'pacote',contentQty:1,contentUnit:'un',totalCost:'',itemName:''});
       refreshPurchaseItemsList();

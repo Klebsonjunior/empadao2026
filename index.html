@@ -830,9 +830,31 @@ function updatePurchaseItemsSum(){
 function addPurchaseDraftItem(event){
   event?.preventDefault();
   syncPurchaseDraftFromDom();
-  purchaseDraftItems.push({ingredientId:'',purchaseQty:'',purchaseUnit:'pacote',contentQty:1,contentUnit:'un',totalCost:'',itemName:''});
-  refreshPurchaseItemsList();
-  const input = document.querySelector('#purchaseItemsList .purchase-item:last-child .pi-ingredient-name');
+  const newItem = {ingredientId:'',purchaseQty:'',purchaseUnit:'pacote',contentQty:1,contentUnit:'un',totalCost:'',itemName:''};
+  const newIndex = purchaseDraftItems.length;
+  purchaseDraftItems.push(newItem);
+  const container = document.getElementById('purchaseItemsList');
+  if(!container) return;
+  container.insertAdjacentHTML('beforeend', renderPurchaseItemRow(newIndex, newItem));
+  const row = container.lastElementChild;
+  row.querySelector('.pi-remove').onclick = e=>{
+    purchaseDraftItems.splice(Number(e.currentTarget.closest('.purchase-item').dataset.idx),1);
+    refreshPurchaseItemsList();
+  };
+  row.querySelector('.pi-ingredient-name').addEventListener('input', e=>{
+    const typed = e.currentTarget.value.trim().toLowerCase();
+    const ing = DB.ingredients.find(item=>item.name.trim().toLowerCase()===typed);
+    row.dataset.ingredientId = ing?.id || '';
+    if(ing) row.querySelector('.pi-content-unit').value = ing.unit;
+  });
+  row.querySelectorAll('.pi-total,.pi-purchase-qty,.pi-content-qty').forEach(input=>input.addEventListener('input', ()=>{
+    const qty=Number(row.querySelector('.pi-purchase-qty').value)||0;
+    const total=Number(row.querySelector('.pi-total').value)||0;
+    row.querySelector('.pi-unit-cost').textContent=qty&&total ? fmtBRL(total/qty)+' por embalagem' : '';
+    updatePurchaseItemsSum();
+  }));
+  updatePurchaseItemsSum();
+  const input = row.querySelector('.pi-ingredient-name');
   if(input) setTimeout(()=>input.focus(), 0);
 }
 window.__addPurchaseDraftItem = addPurchaseDraftItem;

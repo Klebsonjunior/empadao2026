@@ -759,15 +759,16 @@ function renderIngredientes(){
 
 let purchaseDraftItems = [];
 function renderPurchaseItemRow(idx, item){
-  const ing = getIngredient(item?.ingredientId) || DB.ingredients[0];
-  const ingOptions = DB.ingredients.map(i=>`<option value="${i.id}" ${item&&item.ingredientId===i.id?'selected':''}>${i.name}</option>`).join('');
+  const ing = item?.ingredientId ? getIngredient(item.ingredientId) : null;
+  const listId = `purchase-items-options-${idx}`;
+  const ingOptions = DB.ingredients.map(i=>`<option value="${i.name.replace(/"/g,'&quot;')}"></option>`).join('');
   const selectedUnit = item?.contentUnit || item?.unit || ing?.unit || 'un';
   const purchaseQty = item?.purchaseQty ?? item?.qty ?? '';
   const contentQty = item?.contentQty ?? 1;
   const purchaseUnit = item?.purchaseUnit || 'pacote';
   const unitCost = Number(item?.totalCost)>0 && Number(purchaseQty)>0 ? Number(item.totalCost)/Number(purchaseQty) : 0;
-  return `<div class="purchase-item" data-idx="${idx}">
-    <div><label>Ingrediente / insumo</label><select class="pi-ingredient" required>${ingOptions}</select></div>
+  return `<div class="purchase-item" data-idx="${idx}" data-ingredient-id="${item?.ingredientId||ing?.id||''}">
+    <div><label>Item / insumo</label><input class="pi-ingredient-name" list="${listId}" autocomplete="off" placeholder="Comece a digitar..." value="${(item?.itemName || ing?.name || '').replace(/"/g,'&quot;')}" required><datalist id="${listId}">${ingOptions}</datalist></div>
     <div><label>Qtd. de embalagens</label><input class="pi-purchase-qty" type="number" min="0" step="any" placeholder="Ex: 5" value="${purchaseQty}" required></div>
     <div><label>Embalagem</label><select class="pi-purchase-unit"><option ${purchaseUnit==='pacote'?'selected':''}>pacote</option><option ${purchaseUnit==='caixa'?'selected':''}>caixa</option><option ${purchaseUnit==='saco'?'selected':''}>saco</option><option ${purchaseUnit==='fardo'?'selected':''}>fardo</option><option ${purchaseUnit==='bandeja'?'selected':''}>bandeja</option></select></div>
     <div><label>Conteúdo por embalagem</label><input class="pi-content-qty" type="number" min="0" step="any" value="${contentQty}" required></div>
@@ -790,10 +791,12 @@ function refreshPurchaseItemsList(){
       updatePurchaseItemsSum();
     };
   });
-  container.querySelectorAll('.pi-ingredient').forEach(sel=>{
-    sel.addEventListener('change', e=>{
+  container.querySelectorAll('.pi-ingredient-name').forEach(input=>{
+    input.addEventListener('input', e=>{
       const row = e.currentTarget.closest('.purchase-item');
-      const ing = getIngredient(e.currentTarget.value);
+      const typed = e.currentTarget.value.trim().toLowerCase();
+      const ing = DB.ingredients.find(item=>item.name.trim().toLowerCase()===typed);
+      row.dataset.ingredientId = ing?.id || '';
       if(ing) row.querySelector('.pi-content-unit').value = ing.unit;
     });
   });
@@ -810,7 +813,8 @@ function syncPurchaseDraftFromDom(){
   const rows = [...document.querySelectorAll('#purchaseItemsList .purchase-item')];
   if(!rows.length) return;
   purchaseDraftItems = rows.map(row=>({
-    ingredientId:row.querySelector('.pi-ingredient')?.value,
+    ingredientId:row.dataset.ingredientId || DB.ingredients.find(item=>item.name.trim().toLowerCase()===row.querySelector('.pi-ingredient-name')?.value.trim().toLowerCase())?.id,
+    itemName:row.querySelector('.pi-ingredient-name')?.value || '',
     purchaseQty:row.querySelector('.pi-purchase-qty')?.value || '',
     purchaseUnit:row.querySelector('.pi-purchase-unit')?.value || 'pacote',
     contentQty:row.querySelector('.pi-content-qty')?.value || 1,
@@ -1230,18 +1234,9 @@ function attachHandlers(){
     refreshPurchaseItemsList();
     addPurchaseItem.onclick = ()=>{
       syncPurchaseDraftFromDom();
-      if(!DB.ingredients.length){ toast('Cadastre um item primeiro.'); return; }
-      const list = DB.ingredients.map((item,index)=>`${index+1} - ${item.name}`).join('\n');
-      const choice = prompt('Digite o número ou o nome do item já cadastrado:\n\n'+list);
-      if(!choice?.trim()) return;
-      const normalized = choice.trim().toLowerCase();
-      const byNumber = Number.parseInt(normalized,10);
-      const selected = Number.isInteger(byNumber) && byNumber>=1 && byNumber<=DB.ingredients.length
-        ? DB.ingredients[byNumber-1]
-        : DB.ingredients.find(item=>item.name.trim().toLowerCase()===normalized);
-      if(!selected){ toast('Item não encontrado. Escolha um número da lista ou digite o nome exato.'); return; }
-      purchaseDraftItems.push({ingredientId:selected.id,purchaseQty:'',purchaseUnit:'pacote',contentQty:1,contentUnit:selected.unit,totalCost:''});
+      purchaseDraftItems.push({ingredientId:'',purchaseQty:'',purchaseUnit:'pacote',contentQty:1,contentUnit:'un',totalCost:'',itemName:''});
       refreshPurchaseItemsList();
+      document.querySelector('#purchaseItemsList .purchase-item:last-child .pi-ingredient-name')?.focus();
     };
   }
   const fc = document.getElementById('form-compra');
@@ -1249,7 +1244,7 @@ function attachHandlers(){
     e.preventDefault();
     const f = new FormData(fc);
     const items = [...fc.querySelectorAll('.purchase-item')].map(row=>({
-      ingredientId:row.querySelector('.pi-ingredient').value,
+      ingredientId:row.dataset.ingredientId || DB.ingredients.find(item=>item.name.trim().toLowerCase()===row.querySelector('.pi-ingredient-name').value.trim().toLowerCase())?.id,
       purchaseQty:parseFloat(row.querySelector('.pi-purchase-qty').value),
       purchaseUnit:row.querySelector('.pi-purchase-unit').value,
       contentQty:parseFloat(row.querySelector('.pi-content-qty').value),

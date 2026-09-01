@@ -56,7 +56,35 @@
   .sale-line{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
   .sale-line select{flex:2;}
   .sale-line input{flex:1;}
+  .purchase-item{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:6px;align-items:end;background:#faf7f2;padding:8px;border-radius:8px;margin-bottom:6px;}
+  .purchase-item label{display:block;margin-bottom:4px;}
+  .report-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:end;}
+  .report-toolbar .field{flex:1;min-width:130px;}
+  .report-toolbar .presets{display:flex;gap:6px;flex-wrap:wrap;}
+  .report-toolbar button.active{background:var(--accent);color:#fff;}
+  .report-section{margin-top:14px;}
+  .report-section h3{font-size:14px;color:var(--accent-dark);margin:0 0 8px;}
+  .report-table-wrap{overflow-x:auto;}
+  .purchase-entry{border:1px solid var(--border);border-radius:10px;padding:10px;margin:8px 0;background:#fff;}
+  .purchase-entry-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;}
+  .purchase-entry-title{font-weight:700;}
+  .purchase-entry-total{font-weight:700;color:var(--accent-dark);font-size:15px;white-space:nowrap;}
+  .purchase-entry table{margin-top:8px;}
+  .summary-note{background:#faf7f2;border-radius:8px;padding:10px;font-size:12px;color:var(--sub);}
+  .print-only{display:none;}
   .loading{text-align:center;padding:60px 20px;color:var(--sub);}
+  @media(max-width:620px){
+    .purchase-item{grid-template-columns:1fr 1fr;}
+    .purchase-item > :first-child{grid-column:1 / -1;}
+    .purchase-item > .danger{align-self:center;}
+  }
+  @media print{
+    body{background:#fff;}
+    header,nav,#toast,.no-print{display:none!important;}
+    main{max-width:none;padding:0;}
+    .card,.kpi{border:1px solid #bbb;break-inside:avoid;}
+    .print-only{display:block;}
+  }
   #authScreen{max-width:360px;margin:60px auto;padding:0 20px;}
   #authScreen .card{padding:24px;}
   #authScreen h1{text-align:center;font-size:20px;margin-bottom:4px;}
@@ -103,6 +131,7 @@
     <button data-tab="fichas">Fichas Técnicas</button>
     <button data-tab="ingredientes">Ingredientes</button>
     <button data-tab="compras">Compras</button>
+    <button data-tab="relatorios">Relatórios</button>
   </nav>
 
   <main id="main"><div class="loading">Carregando dados...</div></main>
@@ -216,21 +245,23 @@ supabase.auth.onAuthStateChange((event, session)=>{
 });
 
 // ===================== DATA LAYER =====================
-let DB = {ingredients:[],purchases:[],products:[],recipes:{},recipeItems:{},productions:[],sales:[]};
+let DB = {ingredients:[],purchases:[],purchaseBatches:[],products:[],recipes:{},recipeItems:{},productions:[],sales:[],movements:[]};
 let booted = false;
 
 async function loadAll(){
-  const [ing, pur, prod, rec, ri, pb, sales, saleItems] = await Promise.all([
+  const [ing, purBatch, pur, prod, rec, ri, pb, sales, saleItems, movements] = await Promise.all([
     supabase.from('ingredients').select('*').eq('active',true).order('name'),
-    supabase.from('purchases').select('*').order('purchase_date',{ascending:false}),
+    supabase.from('purchase_batches').select('*').order('purchase_date',{ascending:false}).order('created_at',{ascending:false}),
+    supabase.from('purchases').select('*').order('purchase_date',{ascending:false}).order('created_at',{ascending:false}),
     supabase.from('products').select('*').eq('active',true).order('name'),
     supabase.from('recipes').select('*'),
     supabase.from('recipe_items').select('*'),
     supabase.from('production_batches').select('*').order('production_date',{ascending:false}),
     supabase.from('sales').select('*').order('sale_date',{ascending:false}),
-    supabase.from('sale_items').select('*')
+    supabase.from('sale_items').select('*'),
+    supabase.from('inventory_movements').select('*').order('movement_date',{ascending:false}).order('created_at',{ascending:false})
   ]);
-  const failed = [ing, pur, prod, rec, ri, pb, sales, saleItems].find(response=>response.error);
+  const failed = [ing, purBatch, pur, prod, rec, ri, pb, sales, saleItems, movements].find(response=>response.error);
   if(failed){
     console.error('Erro ao carregar dados do Supabase:', failed.error);
     const result = failedResult(failed.error, 'Não foi possível carregar os dados.');
@@ -238,9 +269,18 @@ async function loadAll(){
     return result;
   }
   DB.ingredients = ing.data || [];
+  DB.purchaseBatches = purBatch.data || [];
   DB.purchases = pur.data || [];
+  const purchaseItemsByBatch = {};
+  DB.purchases.forEach(item=>{
+    if(!item.purchase_batch_id) return;
+    if(!purchaseItemsByBatch[item.purchase_batch_id]) purchaseItemsByBatch[item.purchase_batch_id] = [];
+    purchaseItemsByBatch[item.purchase_batch_id].push(item);
+  });
+  DB.purchaseBatches = DB.purchaseBatches.map(batch=>({...batch, items:purchaseItemsByBatch[batch.id]||[]}));
   DB.products = prod.data || [];
   DB.productions = pb.data || [];
+  DB.movements = movements.data || [];
 
   DB.recipes = {};
   DB.recipeItems = {};
@@ -323,14 +363,49 @@ async function registerPurchase(ingredientId, date, qty, unit, totalCost){
   }).eq('id', ingredientId);
   if(iErr) return failedResult(iErr, 'A compra foi salva, mas o estoque não pôde ser atualizado.');
 
-  const {error: mErr} = await supabase.from('inventory_movements').insert({
-    item_type:'ingredient', item_id: ingredientId, movement_type:'compra',
+  const {error: movementError} = await supabase.from('inventory_movements').insert({
+    item_type:'ingredient', item_id: ingredientId, movement_type:'compra', movement_date:date,
     qty_before: oldStock, qty_change: qtyBase, qty_after: newStock, note: 'Compra em '+date
   });
-  if(mErr) return failedResult(mErr, 'A compra e o estoque foram salvos, mas o histórico não pôde ser atualizado.');
+  if(movementError) return failedResult(movementError, 'A compra e o estoque foram salvos, mas o histórico não pôde ser atualizado.');
 
   const loaded = await loadAll();
   return loaded.ok ? {ok:true} : loaded;
+}
+
+async function registerPurchaseBatch(purchaseDate, purchaseCategory, supplierName, totalCost, items, note, receiptReference){
+  const cleanSupplier = String(supplierName||'').trim();
+  const total = Number(totalCost);
+  const validItems = Array.isArray(items) ? items.map(item=>({
+    ingredient_id:item.ingredientId,
+    qty:Number(item.qty),
+    unit:item.unit,
+    total_cost:Math.round(Number(item.totalCost)*100)/100
+  })) : [];
+  if(!purchaseDate) return failedResult({message:'Informe a data da compra.'});
+  if(!cleanSupplier) return failedResult({message:'Informe o mercado, fornecedor ou local da compra.'});
+  if(!(total>=0)) return failedResult({message:'Informe um valor total válido.'});
+  if(!validItems.length) return failedResult({message:'Adicione ao menos um item à compra.'});
+  if(validItems.some(item=>!getIngredient(item.ingredient_id) || !(item.qty>0) || !(item.total_cost>=0) || !UNIT_FAMILY[item.unit])){
+    return failedResult({message:'Revise os ingredientes, quantidades, unidades e valores dos itens.'});
+  }
+  const itemSum = Math.round(validItems.reduce((sum,item)=>sum+item.total_cost,0)*100)/100;
+  if(itemSum!==Math.round(total*100)/100){
+    return failedResult({message:'O valor total deve ser igual à soma dos itens. Soma atual: '+fmtBRL(itemSum)+'.'});
+  }
+
+  const {data, error} = await supabase.rpc('register_purchase_batch', {
+    p_purchase_date:purchaseDate,
+    p_purchase_category:purchaseCategory,
+    p_supplier_name:cleanSupplier,
+    p_total_cost:Math.round(total*100)/100,
+    p_items:validItems,
+    p_note:String(note||'').trim() || null,
+    p_receipt_reference:String(receiptReference||'').trim() || null
+  });
+  if(error) return failedResult(error, 'Não foi possível registrar a compra completa.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true, data} : loaded;
 }
 
 async function registerProduct(name, price, minStock){
@@ -429,7 +504,7 @@ async function registerProduction(productId, date, qtyProduced, qtyLost, force){
     const {error: ingredientError} = await supabase.from('ingredients').update({stock: u.after, updated_at: new Date().toISOString()}).eq('id', u.id);
     if(ingredientError) return failedResult(ingredientError, 'A produção foi salva, mas um ingrediente não pôde ser atualizado.');
     const {error: movementError} = await supabase.from('inventory_movements').insert({
-      item_type:'ingredient', item_id: u.id, movement_type:'producao_saida',
+      item_type:'ingredient', item_id: u.id, movement_type:'producao_saida', movement_date:date,
       qty_before: u.before, qty_change: u.change, qty_after: u.after, origin_id: batch.id
     });
     if(movementError) return failedResult(movementError, 'A produção foi salva, mas o histórico do estoque não pôde ser atualizado.');
@@ -440,7 +515,7 @@ async function registerProduction(productId, date, qtyProduced, qtyLost, force){
   const {error: productError} = await supabase.from('products').update({stock: prodAfter, last_unit_cost: unitCost, updated_at: new Date().toISOString()}).eq('id', productId);
   if(productError) return failedResult(productError, 'A produção foi salva, mas o estoque do produto não pôde ser atualizado.');
   const {error: productMovementError} = await supabase.from('inventory_movements').insert({
-    item_type:'product', item_id: productId, movement_type:'producao_entrada',
+    item_type:'product', item_id: productId, movement_type:'producao_entrada', movement_date:date,
     qty_before: prodBefore, qty_change: usable, qty_after: prodAfter, origin_id: batch.id
   });
   if(productMovementError) return failedResult(productMovementError, 'A produção foi salva, mas o histórico do produto não pôde ser atualizado.');
@@ -497,7 +572,7 @@ async function registerSale(lines, date, discount){
     const {error: productError} = await supabase.from('products').update({stock: after, updated_at: new Date().toISOString()}).eq('id', it.productId);
     if(productError) return failedResult(productError, 'A venda foi salva, mas o estoque do produto não pôde ser atualizado.');
     const {error: movementError} = await supabase.from('inventory_movements').insert({
-      item_type:'product', item_id: it.productId, movement_type:'venda',
+      item_type:'product', item_id: it.productId, movement_type:'venda', movement_date:date,
       qty_before: before, qty_change: -it.qty, qty_after: after, origin_id: sale.id
     });
     if(movementError) return failedResult(movementError, 'A venda foi salva, mas o histórico do estoque não pôde ser atualizado.');
@@ -518,7 +593,7 @@ async function cancelSale(saleId){
     const {error: productError} = await supabase.from('products').update({stock: after, updated_at: new Date().toISOString()}).eq('id', it.product_id);
     if(productError) return failedResult(productError, 'O estoque não pôde ser revertido.');
     const {error: movementError} = await supabase.from('inventory_movements').insert({
-      item_type:'product', item_id: it.product_id, movement_type:'cancelamento',
+      item_type:'product', item_id: it.product_id, movement_type:'cancelamento', movement_date:todayISO(),
       qty_before: before, qty_change: Number(it.qty), qty_after: after, origin_id: saleId
     });
     if(movementError) return failedResult(movementError, 'O estoque foi revertido, mas o histórico não pôde ser atualizado.');
@@ -538,6 +613,10 @@ function metrics(){
   const monthSales = validSales.filter(s=>s.sale_date.startsWith(monthPrefix));
   const sum = (arr,f)=>arr.reduce((a,s)=>a+f(s),0);
   const stockValue = DB.ingredients.reduce((a,i)=>a+Number(i.stock)*Number(i.avg_cost),0) + DB.products.reduce((a,p)=>a+Number(p.stock)*Number(p.last_unit_cost),0);
+  const monthPurchaseBatches = (DB.purchaseBatches||[]).filter(p=>p.purchase_date.startsWith(monthPrefix));
+  const legacyMonthPurchases = DB.purchases.filter(p=>!p.purchase_batch_id && p.purchase_date.startsWith(monthPrefix));
+  const purchasesMonth = sum(monthPurchaseBatches,p=>Number(p.total_cost)) + sum(legacyMonthPurchases,p=>Number(p.total_cost));
+  const purchaseCountMonth = monthPurchaseBatches.length + legacyMonthPurchases.length;
   const fatMes = sum(monthSales,s=>Number(s.total));
   const lucroMes = sum(monthSales,s=>Number(s.profit));
   return {
@@ -550,6 +629,8 @@ function metrics(){
     ticketMedio: monthSales.length ? fatMes/monthSales.length : 0,
     cmvMes: sum(monthSales,s=>Number(s.cost)),
     margemMes: fatMes>0 ? lucroMes/fatMes*100 : 0,
+    comprasMes: purchasesMonth,
+    comprasQtdMes: purchaseCountMonth,
     stockValue
   };
 }
@@ -565,6 +646,7 @@ function renderTab(tab){
   if(tab==='dashboard') return renderDashboard();
   if(tab==='ingredientes') return renderIngredientes();
   if(tab==='compras') return renderCompras();
+  if(tab==='relatorios') return renderRelatorios();
   if(tab==='produtos') return renderProdutos();
   if(tab==='fichas') return renderFichas();
   if(tab==='producao') return renderProducao();
@@ -586,8 +668,11 @@ function renderDashboard(){
     <div class="kpi"><div class="label">Ticket médio (mês)</div><div class="value">${fmtBRL(m.ticketMedio)}</div></div>
     <div class="kpi"><div class="label">Margem bruta (mês)</div><div class="value">${m.margemMes.toFixed(1)}%</div></div>
     <div class="kpi"><div class="label">CMV (mês)</div><div class="value">${fmtBRL(m.cmvMes)}</div></div>
+    <div class="kpi"><div class="label">Compras do mês</div><div class="value">${fmtBRL(m.comprasMes)}</div></div>
+    <div class="kpi"><div class="label">Idas ao mercado/fornecedor</div><div class="value">${m.comprasQtdMes}</div></div>
     <div class="kpi"><div class="label">Valor em estoque</div><div class="value">${fmtBRL(m.stockValue)}</div></div>
   </div>
+  <div class="card"><h2>Visão rápida do caixa</h2><div class="summary-note">No mês atual, foram registradas <b>${m.comprasQtdMes}</b> compras, totalizando <b>${fmtBRL(m.comprasMes)}</b> em desembolsos. O faturamento foi <b>${fmtBRL(m.faturamentoMes)}</b> e o lucro bruto calculado foi <b>${fmtBRL(m.lucroMes)}</b>.</div></div>
   <div class="card"><h2>⚠️ Alertas de estoque baixo</h2>${renderLowStockAlerts()}</div>
   <div class="card"><h2>Últimas vendas</h2>${renderRecentSalesTable(5)}</div>`;
 }
@@ -600,8 +685,8 @@ function renderLowStockAlerts(){
   lowProd.forEach(p=>html+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">🥧 <b>${p.name}</b> — ${p.stock} un <span class="muted">(mín: ${p.min_stock} un)</span></div>`);
   return html;
 }
-function renderRecentSalesTable(limit){
-  const sales = [...DB.sales].filter(s=>!s.cancelled).slice(0,limit||100);
+function renderRecentSalesTable(limit, source=DB.sales){
+  const sales = [...source].filter(s=>!s.cancelled).slice(0,limit||100);
   if(!sales.length) return '<div class="empty">Nenhuma venda registrada ainda.</div>';
   const rows = sales.map(s=>`<tr>
     <td>${fmtDate(s.sale_date)}</td>
@@ -638,31 +723,87 @@ function renderIngredientes(){
   </div>`;
 }
 
-function renderCompras(){
-  const ingOptions = DB.ingredients.map(i=>`<option value="${i.id}">${i.name}</option>`).join('');
-  const rows = DB.purchases.map(p=>{
-    const ing = getIngredient(p.ingredient_id);
-    return `<tr><td>${fmtDate(p.purchase_date)}</td><td>${ing?ing.name:'—'}</td><td>${p.qty} ${p.unit}</td><td>${fmtBRL(p.total_cost)}</td></tr>`;
+let purchaseDraftItems = [];
+function renderPurchaseItemRow(idx, item){
+  const ing = getIngredient(item?.ingredientId) || DB.ingredients[0];
+  const ingOptions = DB.ingredients.map(i=>`<option value="${i.id}" ${item&&item.ingredientId===i.id?'selected':''}>${i.name}</option>`).join('');
+  const selectedUnit = item?.unit || ing?.unit || 'un';
+  return `<div class="purchase-item" data-idx="${idx}">
+    <div><label>Ingrediente</label><select class="pi-ingredient" required>${ingOptions}</select></div>
+    <div><label>Quantidade</label><input class="pi-qty" type="number" min="0" step="any" placeholder="Qtd" value="${item?.qty||''}" required></div>
+    <div><label>Unidade</label><select class="pi-unit" required>
+      <option value="kg" ${selectedUnit==='kg'?'selected':''}>kg</option><option value="g" ${selectedUnit==='g'?'selected':''}>g</option>
+      <option value="l" ${selectedUnit==='l'?'selected':''}>L</option><option value="ml" ${selectedUnit==='ml'?'selected':''}>ml</option><option value="un" ${selectedUnit==='un'?'selected':''}>un</option>
+    </select></div>
+    <div><label>Valor do item (R$)</label><input class="pi-total" type="number" min="0" step="0.01" placeholder="0,00" value="${item?.totalCost??''}" required></div>
+    <button type="button" class="danger pi-remove" aria-label="Remover item">✕</button>
+  </div>`;
+}
+function refreshPurchaseItemsList(){
+  const container = document.getElementById('purchaseItemsList');
+  if(!container) return;
+  container.innerHTML = purchaseDraftItems.map((item,idx)=>renderPurchaseItemRow(idx,item)).join('');
+  container.querySelectorAll('.pi-remove').forEach(btn=>{
+    btn.onclick = e=>{
+      purchaseDraftItems.splice(Number(e.currentTarget.closest('.purchase-item').dataset.idx),1);
+      refreshPurchaseItemsList();
+      updatePurchaseItemsSum();
+    };
+  });
+  container.querySelectorAll('.pi-ingredient').forEach(sel=>{
+    sel.addEventListener('change', e=>{
+      const row = e.currentTarget.closest('.purchase-item');
+      const ing = getIngredient(e.currentTarget.value);
+      if(ing) row.querySelector('.pi-unit').value = ing.unit;
+    });
+  });
+  container.querySelectorAll('.pi-qty,.pi-total').forEach(input=>input.addEventListener('input', updatePurchaseItemsSum));
+  updatePurchaseItemsSum();
+}
+function updatePurchaseItemsSum(){
+  const sum = [...document.querySelectorAll('#purchaseItemsList .pi-total')].reduce((total,input)=>total+(Number(input.value)||0),0);
+  const el = document.getElementById('purchaseItemsSum');
+  if(el) el.textContent = 'Soma dos itens: '+fmtBRL(sum);
+}
+function renderPurchaseBatch(batch){
+  const categoryLabels = {mercado:'Mercado', casa_embalagens:'Casa de embalagens', outro:'Outro'};
+  const itemRows = (batch.items||[]).map(item=>{
+    const ing = getIngredient(item.ingredient_id);
+    return `<tr><td>${ing?ing.name:'Ingrediente removido'}</td><td>${item.qty} ${item.unit}</td><td>${fmtBRL(item.total_cost)}</td></tr>`;
   }).join('');
+  return `<div class="purchase-entry">
+    <div class="purchase-entry-head"><div><div class="purchase-entry-title">${fmtDate(batch.purchase_date)} · ${batch.supplier_name}</div><div class="muted">${categoryLabels[batch.purchase_category]||'Compra'}${batch.receipt_reference?' · Nota: '+batch.receipt_reference:''}</div></div><div class="purchase-entry-total">${fmtBRL(batch.total_cost)}</div></div>
+    ${batch.note?`<div class="muted" style="margin-top:6px;">${batch.note}</div>`:''}
+    ${itemRows?`<div class="report-table-wrap"><table><tr><th>Item</th><th>Quantidade</th><th>Valor</th></tr>${itemRows}</table></div>`:'<div class="empty">Nenhum item detalhado.</div>'}
+  </div>`;
+}
+function renderCompras(){
+  const batches = DB.purchaseBatches||[];
   return `
-  <div class="card"><h2>Nova compra</h2>
+  <div class="card"><h2>Nova compra / entrada de caixa</h2>
+    <div class="summary-note">Cadastre uma ida ao mercado ou fornecedor como um único lançamento. Depois, informe cada item separadamente. O total da compra precisa ser exatamente igual à soma dos itens para atualizar o estoque e o caixa corretamente.</div>
     ${DB.ingredients.length ? `
-    <form id="form-compra">
-      <label>Ingrediente</label><select name="ingredientId" required>${ingOptions}</select>
-      <label>Data</label><input name="date" type="date" value="${todayISO()}" required>
+    <form id="form-compra" style="margin-top:12px;">
       <div class="row">
-        <div><label>Quantidade</label><input name="qty" type="number" step="any" required></div>
-        <div><label>Unidade</label><select name="unit" required>
-          <option value="kg">kg</option><option value="g">g</option>
-          <option value="l">L</option><option value="ml">ml</option><option value="un">un</option>
-        </select></div>
+        <div><label>Data da compra</label><input name="date" type="date" value="${todayISO()}" required></div>
+        <div><label>Tipo de compra</label><select name="category" required><option value="mercado">Mercado</option><option value="casa_embalagens">Casa de embalagens</option><option value="outro">Outro</option></select></div>
       </div>
-      <label>Valor total pago (R$)</label><input name="totalCost" type="number" step="any" required>
-      <button class="primary" type="submit">Registrar compra</button>
+      <label>Mercado / fornecedor / local</label><input name="supplierName" required placeholder="Ex: Atacadão, Casa das Embalagens">
+      <label>Itens da compra</label>
+      <div id="purchaseItemsList"></div>
+      <button class="secondary" id="addPurchaseItem" type="button">+ Adicionar item</button>
+      <div class="row" style="margin-top:8px;">
+        <div><label>Valor total da compra (R$)</label><input id="purchaseTotal" name="totalCost" type="number" min="0" step="0.01" placeholder="300,00" required></div>
+        <div id="purchaseItemsSum" class="summary-note" style="align-self:end;">Soma dos itens: R$ 0,00</div>
+      </div>
+      <label>Observação (opcional)</label><input name="note" placeholder="Ex: compra para produção da semana">
+      <label>Número da nota ou referência do comprovante (opcional)</label><input name="receiptReference" placeholder="Ex: NF 12345 ou link do arquivo">
+      <button class="primary" type="submit">Registrar compra completa</button>
     </form>` : '<div class="empty">Cadastre um ingrediente primeiro.</div>'}
   </div>
   <div class="card"><h2>Histórico de compras</h2>
-    ${DB.purchases.length ? `<table><tr><th>Data</th><th>Ingrediente</th><th>Qtd</th><th>Total</th></tr>${rows}</table>` : '<div class="empty">Nenhuma compra registrada.</div>'}
+    ${batches.length ? batches.map(renderPurchaseBatch).join('') : '<div class="empty">Nenhuma compra composta registrada.</div>'}
+    ${DB.purchases.some(p=>!p.purchase_batch_id)?'<div class="summary-note" style="margin-top:10px;">Existem lançamentos antigos cadastrados antes do modelo de compras compostas. Eles continuam no banco e serão considerados nos relatórios pelo valor individual.</div>':''}
   </div>`;
 }
 
@@ -784,6 +925,113 @@ function renderEstoque(){
   </div>`;
 }
 
+function addDaysISO(iso, amount){
+  const date = new Date(iso+'T12:00:00');
+  date.setDate(date.getDate()+amount);
+  return date.toISOString().slice(0,10);
+}
+function periodLabel(start, end){
+  if(start===end) return fmtDate(start);
+  return fmtDate(start)+' a '+fmtDate(end);
+}
+let reportState = {preset:'month', area:'all', start:todayISO().slice(0,7)+'-01', end:todayISO()};
+function setReportPreset(preset){
+  const end = todayISO();
+  let start = reportState.start;
+  if(preset==='day') start = end;
+  if(preset==='week') start = addDaysISO(end,-6);
+  if(preset==='month') start = end.slice(0,7)+'-01';
+  reportState = {...reportState, preset, start, end};
+  render();
+}
+function setReportArea(area){
+  reportState = {...reportState, area};
+  render();
+}
+function reportDateInRange(date, start, end){
+  const value = String(date||'').slice(0,10);
+  return value>=start && value<=end;
+}
+function reportData(){
+  const {start,end} = reportState;
+  const purchaseBatches = (DB.purchaseBatches||[]).filter(p=>reportDateInRange(p.purchase_date,start,end));
+  const legacyPurchases = DB.purchases.filter(p=>!p.purchase_batch_id && reportDateInRange(p.purchase_date,start,end));
+  const purchaseItems = DB.purchases.filter(p=>reportDateInRange(p.purchase_date,start,end));
+  const sales = DB.sales.filter(s=>!s.cancelled && reportDateInRange(s.sale_date,start,end));
+  const productions = DB.productions.filter(p=>reportDateInRange(p.production_date,start,end));
+  const movements = (DB.movements||[]).filter(m=>reportDateInRange(m.movement_date||m.created_at,start,end));
+  const sum = (arr, field)=>arr.reduce((total,item)=>total+Number(typeof field==='function'?field(item):item[field]||0),0);
+  const purchaseTotal = sum(purchaseBatches,'total_cost') + sum(legacyPurchases,'total_cost');
+  const salesTotal = sum(sales,'total');
+  const salesCost = sum(sales,'cost');
+  const productionCost = sum(productions,'batch_cost');
+  const stockIngredientsValue = DB.ingredients.reduce((total,i)=>total+Number(i.stock)*Number(i.avg_cost),0);
+  const stockProductsValue = DB.products.reduce((total,p)=>total+Number(p.stock)*Number(p.last_unit_cost),0);
+  const categories = {};
+  purchaseBatches.forEach(p=>{ categories[p.purchase_category]=(categories[p.purchase_category]||0)+Number(p.total_cost); });
+  if(legacyPurchases.length) categories.legado=(categories.legado||0)+sum(legacyPurchases,'total_cost');
+  const ingredientTotals = {};
+  purchaseItems.forEach(item=>{
+    const ingredient = getIngredient(item.ingredient_id);
+    if(!ingredient) return;
+    if(!ingredientTotals[item.ingredient_id]) ingredientTotals[item.ingredient_id]={ingredient, purchasedBase:0, purchasedCost:0, consumedBase:0};
+    ingredientTotals[item.ingredient_id].purchasedBase += Number(item.qty_base)||convertToBase(Number(item.qty),item.unit);
+    ingredientTotals[item.ingredient_id].purchasedCost += Number(item.total_cost);
+  });
+  movements.filter(m=>m.item_type==='ingredient' && m.movement_type==='producao_saida').forEach(m=>{
+    const ingredient = getIngredient(m.item_id);
+    if(!ingredient) return;
+    if(!ingredientTotals[m.item_id]) ingredientTotals[m.item_id]={ingredient, purchasedBase:0, purchasedCost:0, consumedBase:0};
+    ingredientTotals[m.item_id].consumedBase += Math.abs(Number(m.qty_change)||0);
+  });
+  const purchaseEntries = purchaseBatches.map(batch=>({...batch, items:batch.items||[]}));
+  legacyPurchases.forEach(item=>purchaseEntries.push({
+    id:item.id, purchase_date:item.purchase_date, purchase_category:'legado', supplier_name:'Lançamento antigo', total_cost:item.total_cost,
+    receipt_reference:'', note:'Compra registrada antes do modelo composto', items:[item]
+  }));
+  return {start,end,purchaseBatches,legacyPurchases,purchaseItems,purchaseEntries,sales,productions,movements,purchaseTotal,purchaseCount:purchaseEntries.length,salesTotal,salesCost,productionCost,productionUnits:sum(productions,'usable_qty'),productionLosses:sum(productions,'qty_lost'),salesProfit:sum(sales,'profit'),categories,ingredientTotals,stockIngredientsValue,stockProductsValue};
+}
+function renderReportKpis(data){
+  return `<div class="grid">
+    <div class="kpi"><div class="label">Compras / saídas de caixa</div><div class="value">${fmtBRL(data.purchaseTotal)}</div><div class="muted">${data.purchaseCount} lançamento(s)</div></div>
+    <div class="kpi"><div class="label">Faturamento</div><div class="value">${fmtBRL(data.salesTotal)}</div><div class="muted">${data.sales.length} venda(s)</div></div>
+    <div class="kpi"><div class="label">Custo de produção</div><div class="value">${fmtBRL(data.productionCost)}</div><div class="muted">${data.productionUnits} un aproveitáveis</div></div>
+    <div class="kpi"><div class="label">Lucro bruto</div><div class="value ${data.salesProfit>=0?'good':'bad'}">${fmtBRL(data.salesProfit)}</div><div class="muted">Após custo dos produtos vendidos</div></div>
+    <div class="kpi"><div class="label">Estoque de ingredientes</div><div class="value">${fmtBRL(data.stockIngredientsValue)}</div><div class="muted">Custo médio atual</div></div>
+    <div class="kpi"><div class="label">Estoque de produtos</div><div class="value">${fmtBRL(data.stockProductsValue)}</div><div class="muted">Custo do último lote</div></div>
+  </div>`;
+}
+function renderReportPurchases(data){
+  const labels={mercado:'Mercado',casa_embalagens:'Casa de embalagens',outro:'Outro',legado:'Lançamento antigo'};
+  const categoryRows=Object.entries(data.categories).map(([category,total])=>`<tr><td>${labels[category]||category}</td><td>${fmtBRL(total)}</td></tr>`).join('');
+  const entries=data.purchaseEntries.map(entry=>`<div class="purchase-entry">
+    <div class="purchase-entry-head"><div><div class="purchase-entry-title">${fmtDate(entry.purchase_date)} · ${entry.supplier_name}</div><div class="muted">${labels[entry.purchase_category]||'Compra'}${entry.receipt_reference?' · Nota: '+entry.receipt_reference:''}</div></div><div class="purchase-entry-total">${fmtBRL(entry.total_cost)}</div></div>
+    <div class="report-table-wrap"><table><tr><th>Item</th><th>Quantidade</th><th>Valor</th></tr>${(entry.items||[]).map(item=>{const ing=getIngredient(item.ingredient_id);return `<tr><td>${ing?ing.name:'Ingrediente removido'}</td><td>${item.qty} ${item.unit}</td><td>${fmtBRL(item.total_cost)}</td></tr>`;}).join('')}</table></div>
+  </div>`).join('');
+  return `<div class="card report-section"><h3>Compras e caixa</h3><div class="grid"><div class="kpi"><div class="label">Total comprado</div><div class="value">${fmtBRL(data.purchaseTotal)}</div></div><div class="kpi"><div class="label">Quantidade de compras</div><div class="value">${data.purchaseCount}</div></div></div>${categoryRows?`<div class="report-table-wrap"><table><tr><th>Origem</th><th>Total</th></tr>${categoryRows}</table></div>`:''}${entries||'<div class="empty">Nenhuma compra no período.</div>'}</div>`;
+}
+function renderReportSales(data){
+  return `<div class="card report-section"><h3>Vendas e faturamento</h3><div class="report-table-wrap"><table><tr><th>Indicador</th><th>Valor</th></tr><tr><td>Faturamento</td><td>${fmtBRL(data.salesTotal)}</td></tr><tr><td>Custo dos produtos vendidos</td><td>${fmtBRL(data.salesCost)}</td></tr><tr><td>Lucro bruto</td><td>${fmtBRL(data.salesProfit)}</td></tr><tr><td>Margem bruta</td><td>${data.salesTotal>0?(data.salesProfit/data.salesTotal*100).toFixed(1):'0.0'}%</td></tr><tr><td>Quantidade de vendas</td><td>${data.sales.length}</td></tr></table></div>${data.sales.length?renderRecentSalesTable(data.sales.length,data.sales):'<div class="empty">Nenhuma venda no período.</div>'}</div>`;
+}
+function renderReportProduction(data){
+  const rows=data.productions.map(production=>{const product=getProduct(production.product_id);return `<tr><td>${fmtDate(production.production_date)}</td><td>${product?product.name:'Produto removido'}</td><td>${production.usable_qty} un</td><td>${production.qty_lost} un</td><td>${fmtBRL(production.batch_cost)}</td></tr>`;}).join('');
+  return `<div class="card report-section"><h3>Produção e custos</h3><div class="report-table-wrap"><table><tr><th>Indicador</th><th>Valor</th></tr><tr><td>Lotes produzidos</td><td>${data.productions.length}</td></tr><tr><td>Unidades aproveitáveis</td><td>${data.productionUnits}</td></tr><tr><td>Perdas</td><td>${data.productionLosses}</td></tr><tr><td>Custo total de produção</td><td>${fmtBRL(data.productionCost)}</td></tr></table></div>${rows?`<div class="report-table-wrap"><table><tr><th>Data</th><th>Produto</th><th>Aproveitadas</th><th>Perdas</th><th>Custo</th></tr>${rows}</table></div>`:'<div class="empty">Nenhuma produção no período.</div>'}</div>`;
+}
+function renderReportIngredients(data){
+  const rows=Object.values(data.ingredientTotals).sort((a,b)=>a.ingredient.name.localeCompare(b.ingredient.name)).map(item=>`<tr><td>${item.ingredient.name}</td><td>${fmtBRL(item.purchasedCost)}</td><td>${displayQty(item.purchasedBase,item.ingredient.family)}</td><td>${displayQty(item.consumedBase,item.ingredient.family)}</td><td>${displayQty(Number(item.ingredient.stock),item.ingredient.family)}</td><td>${fmtBRL(Number(item.ingredient.stock)*Number(item.ingredient.avg_cost))}</td></tr>`).join('');
+  return `<div class="card report-section"><h3>Ingredientes e insumos</h3><div class="summary-note">Esta tabela separa o que foi comprado no período, o que foi consumido na produção e o saldo físico atual de cada item. O valor do estoque usa o custo médio acumulado.</div>${rows?`<div class="report-table-wrap"><table><tr><th>Ingrediente</th><th>Compras</th><th>Qtd. comprada</th><th>Consumo</th><th>Saldo atual</th><th>Valor atual</th></tr>${rows}</table></div>`:'<div class="empty">Nenhum movimento de ingrediente no período.</div>'}</div>`;
+}
+function renderReportStock(data){
+  const ingredientRows=DB.ingredients.map(i=>`<tr><td>${i.name}</td><td>Ingrediente</td><td>${displayQty(Number(i.stock),i.family)}</td><td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td><td>${displayCostPerBase(Number(i.avg_cost),i.family)}</td></tr>`).join('');
+  const productRows=DB.products.map(p=>`<tr><td>${p.name}</td><td>Produto</td><td>${p.stock} un</td><td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td><td>${fmtBRL(Number(p.last_unit_cost))} /un</td></tr>`).join('');
+  return `<div class="card report-section"><h3>Estoque e valor patrimonial</h3><div class="grid"><div class="kpi"><div class="label">Ingredientes</div><div class="value">${fmtBRL(data.stockIngredientsValue)}</div></div><div class="kpi"><div class="label">Produtos acabados</div><div class="value">${fmtBRL(data.stockProductsValue)}</div></div><div class="kpi"><div class="label">Estoque total</div><div class="value">${fmtBRL(data.stockIngredientsValue+data.stockProductsValue)}</div></div></div><div class="report-table-wrap"><table><tr><th>Item</th><th>Tipo</th><th>Quantidade</th><th>Valor atual</th><th>Custo utilizado</th></tr>${ingredientRows}${productRows}</table></div></div>`;
+}
+function renderRelatorios(){
+  const data=reportData();
+  const visible=area=>reportState.area==='all'||reportState.area===area;
+  return `<div class="card no-print"><h2>Relatórios financeiros e operacionais</h2><div class="summary-note">Escolha um período e uma área. A opção consolidada reúne caixa, compras, vendas, produção, ingredientes e estoque. Use “Imprimir relatório” para gerar uma versão pronta para salvar ou anexar à prestação de contas.</div><div class="report-toolbar" style="margin-top:12px;"><div class="field"><label>Data inicial</label><input id="reportStart" type="date" value="${data.start}"></div><div class="field"><label>Data final</label><input id="reportEnd" type="date" value="${data.end}"></div><div class="presets"><button class="secondary ${reportState.preset==='day'?'active':''}" type="button" data-report-preset="day">Hoje</button><button class="secondary ${reportState.preset==='week'?'active':''}" type="button" data-report-preset="week">Semana</button><button class="secondary ${reportState.preset==='month'?'active':''}" type="button" data-report-preset="month">Mês</button></div><button class="secondary" id="printReport" type="button">Imprimir relatório</button></div><div class="presets" style="margin-top:10px;"><button class="secondary ${reportState.area==='all'?'active':''}" type="button" data-report-area="all">Consolidado</button><button class="secondary ${reportState.area==='compras'?'active':''}" type="button" data-report-area="compras">Compras</button><button class="secondary ${reportState.area==='vendas'?'active':''}" type="button" data-report-area="vendas">Vendas</button><button class="secondary ${reportState.area==='producao'?'active':''}" type="button" data-report-area="producao">Produção</button><button class="secondary ${reportState.area==='ingredientes'?'active':''}" type="button" data-report-area="ingredientes">Ingredientes</button><button class="secondary ${reportState.area==='estoque'?'active':''}" type="button" data-report-area="estoque">Estoque</button></div></div><div class="print-only"><h1>Relatório do Controle Empadões</h1><p>Período: ${periodLabel(data.start,data.end)}</p></div><div class="card"><h2>${reportState.area==='all'?'Relatório consolidado':'Relatório de '+({compras:'compras',vendas:'vendas',producao:'produção',ingredientes:'ingredientes e insumos',estoque:'estoque'}[reportState.area]||'área')}</h2><div class="muted">Período: ${periodLabel(data.start,data.end)}</div>${renderReportKpis(data)}</div>${visible('compras')?renderReportPurchases(data):''}${visible('vendas')?renderReportSales(data):''}${visible('producao')?renderReportProduction(data):''}${visible('ingredientes')?renderReportIngredients(data):''}${visible('estoque')?renderReportStock(data):''}`;
+}
+
 let saleDraftLines = [];
 function renderVendas(){
   const rows = DB.sales.map(s=>`<tr>
@@ -860,7 +1108,7 @@ function attachHandlers(){
       activeTab = btn.dataset.tab;
       document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
-      recipeDraftItems = []; saleDraftLines = [];
+      recipeDraftItems = []; saleDraftLines = []; purchaseDraftItems = [];
       render();
     };
   });
@@ -874,14 +1122,59 @@ function attachHandlers(){
     toast('Ingrediente cadastrado!'); render();
   };
 
+  const addPurchaseItem = document.getElementById('addPurchaseItem');
+  if(addPurchaseItem){
+    if(!purchaseDraftItems.length){
+      const firstIngredient = DB.ingredients[0];
+      purchaseDraftItems.push({ingredientId:firstIngredient?.id, qty:'', unit:firstIngredient?.unit||'un', totalCost:''});
+    }
+    refreshPurchaseItemsList();
+    addPurchaseItem.onclick = ()=>{
+      const firstIngredient = DB.ingredients[0];
+      purchaseDraftItems.push({ingredientId:firstIngredient?.id, qty:'', unit:firstIngredient?.unit||'un', totalCost:''});
+      refreshPurchaseItemsList();
+    };
+  }
   const fc = document.getElementById('form-compra');
   if(fc) fc.onsubmit = async (e)=>{
     e.preventDefault();
     const f = new FormData(fc);
-    const result = await registerPurchase(f.get('ingredientId'), f.get('date'), parseFloat(f.get('qty')), f.get('unit'), parseFloat(f.get('totalCost')));
+    const items = [...fc.querySelectorAll('.purchase-item')].map(row=>({
+      ingredientId:row.querySelector('.pi-ingredient').value,
+      qty:parseFloat(row.querySelector('.pi-qty').value),
+      unit:row.querySelector('.pi-unit').value,
+      totalCost:parseFloat(row.querySelector('.pi-total').value)
+    }));
+    const totalInput = document.getElementById('purchaseTotal');
+    const submitButton = fc.querySelector('button[type=submit]');
+    if(submitButton) submitButton.disabled = true;
+    const result = await registerPurchaseBatch(f.get('date'), f.get('category'), f.get('supplierName'), parseFloat(totalInput.value), items, f.get('note'), f.get('receiptReference'));
+    if(submitButton) submitButton.disabled = false;
     if(!result.ok){ toast('Erro: '+result.msg); return; }
-    toast('Compra registrada! Estoque e custo médio atualizados.'); render();
+    purchaseDraftItems = [];
+    toast('Compra completa registrada! Caixa, estoque e custo médio atualizados.'); render();
   };
+
+  document.querySelectorAll('[data-report-preset]').forEach(btn=>{
+    btn.onclick = ()=>setReportPreset(btn.dataset.reportPreset);
+  });
+  document.querySelectorAll('[data-report-area]').forEach(btn=>{
+    btn.onclick = ()=>setReportArea(btn.dataset.reportArea);
+  });
+  const reportStart = document.getElementById('reportStart');
+  const reportEnd = document.getElementById('reportEnd');
+  const applyReportDates = ()=>{
+    const start = reportStart?.value;
+    const end = reportEnd?.value;
+    if(!start || !end){ toast('Informe as duas datas do relatório.'); return; }
+    if(start>end){ toast('A data inicial não pode ser posterior à data final.'); return; }
+    reportState = {...reportState, preset:'custom', start, end};
+    render();
+  };
+  if(reportStart) reportStart.onchange = applyReportDates;
+  if(reportEnd) reportEnd.onchange = applyReportDates;
+  const printReport = document.getElementById('printReport');
+  if(printReport) printReport.onclick = ()=>window.print();
 
   const fp = document.getElementById('form-produto');
   if(fp) fp.onsubmit = async (e)=>{

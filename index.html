@@ -827,6 +827,14 @@ function updatePurchaseItemsSum(){
   const el = document.getElementById('purchaseItemsSum');
   if(el) el.textContent = 'Soma dos itens: '+fmtBRL(sum);
 }
+function addPurchaseDraftItem(event){
+  event?.preventDefault();
+  syncPurchaseDraftFromDom();
+  purchaseDraftItems.push({ingredientId:'',purchaseQty:'',purchaseUnit:'pacote',contentQty:1,contentUnit:'un',totalCost:'',itemName:''});
+  refreshPurchaseItemsList();
+  const input = document.querySelector('#purchaseItemsList .purchase-item:last-child .pi-ingredient-name');
+  if(input) setTimeout(()=>input.focus(), 0);
+}
 function renderPurchaseBatch(batch){
   const categoryLabels = {mercado:'Mercado', casa_embalagens:'Casa de embalagens', outro:'Outro'};
   const itemRows = (batch.items||[]).map(item=>{
@@ -1232,13 +1240,7 @@ function attachHandlers(){
       purchaseDraftItems.push({ingredientId:firstIngredient?.id, purchaseQty:'', purchaseUnit:'pacote', contentQty:1, contentUnit:firstIngredient?.unit||'un', totalCost:''});
     }
     refreshPurchaseItemsList();
-    addPurchaseItem.onclick = (event)=>{
-      event.preventDefault();
-      syncPurchaseDraftFromDom();
-      purchaseDraftItems.push({ingredientId:'',purchaseQty:'',purchaseUnit:'pacote',contentQty:1,contentUnit:'un',totalCost:'',itemName:''});
-      refreshPurchaseItemsList();
-      document.querySelector('#purchaseItemsList .purchase-item:last-child .pi-ingredient-name')?.focus();
-    };
+    addPurchaseItem.addEventListener('click', addPurchaseDraftItem);
   }
   const fc = document.getElementById('form-compra');
   if(fc) fc.onsubmit = async (e)=>{

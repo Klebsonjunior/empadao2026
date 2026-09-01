@@ -835,6 +835,7 @@ function addPurchaseDraftItem(event){
   const input = document.querySelector('#purchaseItemsList .purchase-item:last-child .pi-ingredient-name');
   if(input) setTimeout(()=>input.focus(), 0);
 }
+window.__addPurchaseDraftItem = addPurchaseDraftItem;
 function renderPurchaseBatch(batch){
   const categoryLabels = {mercado:'Mercado', casa_embalagens:'Casa de embalagens', outro:'Outro'};
   const itemRows = (batch.items||[]).map(item=>{
@@ -867,7 +868,7 @@ function renderCompras(){
       <label>Mercado / fornecedor / local</label><input name="supplierName" required placeholder="Ex: Atacadão, Casa das Embalagens">
       <label>Itens da compra</label>
       <div id="purchaseItemsList"></div>
-      <button class="secondary" id="addPurchaseItem" type="button" data-action="add-purchase-item">+ Adicionar item</button>
+      <button class="secondary" id="addPurchaseItem" type="button" data-action="add-purchase-item" onclick="window.__addPurchaseDraftItem(event)">+ Adicionar item</button>
       <button class="secondary" id="addIngredientFromPurchase" type="button">+ Cadastrar item</button>
       <div class="row" style="margin-top:8px;">
         <div><label>Valor total da compra (R$)</label><input id="purchaseTotal" name="totalCost" type="number" min="0" step="0.01" placeholder="300,00" required></div>
@@ -1184,12 +1185,6 @@ function updateSaleTotalPreview(){
 
 // ===================== HANDLERS =====================
 function attachHandlers(){
-  if(!window.__purchaseAddItemBound){
-    document.addEventListener('click', e=>{
-      if(e.target.closest('#addPurchaseItem')) addPurchaseDraftItem(e);
-    });
-    window.__purchaseAddItemBound = true;
-  }
   document.querySelectorAll('.save-ingredient').forEach(btn=>btn.onclick = async e=>{
     const id = e.currentTarget.dataset.id;
     const result = await updateIngredient(id, document.querySelector('.ing-name[data-id="'+id+'"]')?.value, document.querySelector('.ing-min[data-id="'+id+'"]')?.value);
@@ -1246,7 +1241,6 @@ function attachHandlers(){
       purchaseDraftItems.push({ingredientId:firstIngredient?.id, purchaseQty:'', purchaseUnit:'pacote', contentQty:1, contentUnit:firstIngredient?.unit||'un', totalCost:''});
     }
     refreshPurchaseItemsList();
-    addPurchaseItem.onclick = null;
   }
   const fc = document.getElementById('form-compra');
   if(fc) fc.onsubmit = async (e)=>{

@@ -71,6 +71,9 @@
   .purchase-entry-total{font-weight:700;color:var(--accent-dark);font-size:15px;white-space:nowrap;}
   .purchase-entry table{margin-top:8px;}
   .summary-note{background:#faf7f2;border-radius:8px;padding:10px;font-size:12px;color:var(--sub);}
+  .sheet-input{padding:6px 8px;font-size:13px;min-width:110px;}
+  .sheet-actions{white-space:nowrap;}
+  .sheet-total{font-weight:700;background:#faf7f2;}
   .print-only{display:none;}
   .loading{text-align:center;padding:60px 20px;color:var(--sub);}
   @media(max-width:620px){
@@ -424,6 +427,30 @@ async function registerProduct(name, price, minStock){
   return loaded.ok ? {ok:true, data} : loaded;
 }
 
+async function updateIngredient(id, name, minStock){
+  const ingredient = getIngredient(id);
+  const cleanName = String(name||'').trim();
+  const minimum = Number(minStock);
+  if(!ingredient || !cleanName) return failedResult({message:'Informe um nome válido para o ingrediente.'});
+  if(!(minimum>=0)) return failedResult({message:'O estoque mínimo deve ser zero ou maior.'});
+  const {error} = await supabase.from('ingredients').update({name:cleanName,min_stock:convertToBase(minimum,ingredient.unit),updated_at:new Date().toISOString()}).eq('id',id);
+  if(error) return failedResult(error,'Não foi possível atualizar o ingrediente.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
+async function updateProduct(id, name, price, minStock){
+  const cleanName = String(name||'').trim();
+  const salePrice = Number(price);
+  const minimum = Number(minStock);
+  if(!getProduct(id) || !cleanName) return failedResult({message:'Informe um nome válido para o produto.'});
+  if(!(salePrice>=0) || !(minimum>=0)) return failedResult({message:'Informe preço e estoque mínimo válidos.'});
+  const {error} = await supabase.from('products').update({name:cleanName,price:salePrice,min_stock:minimum,updated_at:new Date().toISOString()}).eq('id',id);
+  if(error) return failedResult(error,'Não foi possível atualizar o produto.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
 async function saveRecipe(productId, items, yieldQty){
   const product = getProduct(productId);
   const rendimento = Number(yieldQty);
@@ -699,10 +726,12 @@ function renderRecentSalesTable(limit, source=DB.sales){
 }
 
 function renderIngredientes(){
+  const totalValue = DB.ingredients.reduce((sum,i)=>sum+Number(i.stock)*Number(i.avg_cost),0);
   const rows = DB.ingredients.map(i=>`<tr>
-    <td>${i.name}</td><td>${displayQty(Number(i.stock),i.family)}</td>
+    <td><input class="sheet-input ing-name" data-id="${i.id}" value="${i.name.replace(/"/g,'&quot;')}"></td><td>${displayQty(Number(i.stock),i.family)}</td>
     <td>${displayCostPerBase(Number(i.avg_cost),i.family)}</td>
-    <td>${Number(i.min_stock)>0 && Number(i.stock)<Number(i.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td>
+    <td><input class="sheet-input ing-min" data-id="${i.id}" type="number" min="0" step="any" value="${Number(i.min_stock)/TO_BASE[i.unit]}"></td>
+    <td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td><td class="sheet-actions"><button class="secondary save-ingredient" data-id="${i.id}" type="button">Salvar</button></td>
   </tr>`).join('');
   return `
   <div class="card"><h2>Novo ingrediente</h2>
@@ -720,7 +749,7 @@ function renderIngredientes(){
     </form>
   </div>
   <div class="card"><h2>Ingredientes cadastrados</h2>
-    ${DB.ingredients.length ? `<table><tr><th>Nome</th><th>Estoque</th><th>Custo médio</th><th>Status</th></tr>${rows}</table>` : '<div class="empty">Nenhum ingrediente cadastrado.</div>'}
+    ${DB.ingredients.length ? `<div class="summary-note">Valor total dos ingredientes em estoque: <b>${fmtBRL(totalValue)}</b></div><div class="report-table-wrap"><table><tr><th>Nome</th><th>Quantidade</th><th>Custo médio</th><th>Estoque mínimo</th><th>Valor total</th><th></th></tr>${rows}<tr class="sheet-total"><td colspan="4">Total em estoque</td><td>${fmtBRL(totalValue)}</td><td></td></tr></table></div>` : '<div class="empty">Nenhum ingrediente cadastrado.</div>'}
   </div>`;
 }
 
@@ -783,7 +812,6 @@ function renderCompras(){
   return `
   <div class="card"><h2>Nova compra / entrada de caixa</h2>
     <div class="summary-note">Cadastre uma ida ao mercado ou fornecedor como um único lançamento. Depois, informe cada item separadamente. O total da compra precisa ser exatamente igual à soma dos itens para atualizar o estoque e o caixa corretamente.</div>
-    ${DB.ingredients.length ? `
     <form id="form-compra" style="margin-top:12px;">
       <div class="row">
         <div><label>Data da compra</label><input name="date" type="date" value="${todayISO()}" required></div>
@@ -793,6 +821,7 @@ function renderCompras(){
       <label>Itens da compra</label>
       <div id="purchaseItemsList"></div>
       <button class="secondary" id="addPurchaseItem" type="button">+ Adicionar item</button>
+      <button class="secondary" id="addIngredientFromPurchase" type="button">+ Cadastrar ingrediente nesta compra</button>
       <div class="row" style="margin-top:8px;">
         <div><label>Valor total da compra (R$)</label><input id="purchaseTotal" name="totalCost" type="number" min="0" step="0.01" placeholder="300,00" required></div>
         <div id="purchaseItemsSum" class="summary-note" style="align-self:end;">Soma dos itens: R$ 0,00</div>
@@ -800,7 +829,7 @@ function renderCompras(){
       <label>Observação (opcional)</label><input name="note" placeholder="Ex: compra para produção da semana">
       <label>Número da nota ou referência do comprovante (opcional)</label><input name="receiptReference" placeholder="Ex: NF 12345 ou link do arquivo">
       <button class="primary" type="submit">Registrar compra completa</button>
-    </form>` : '<div class="empty">Cadastre um ingrediente primeiro.</div>'}
+    </form>
   </div>
   <div class="card"><h2>Histórico de compras</h2>
     ${batches.length ? batches.map(renderPurchaseBatch).join('') : '<div class="empty">Nenhuma compra composta registrada.</div>'}
@@ -809,11 +838,12 @@ function renderCompras(){
 }
 
 function renderProdutos(){
+  const totalValue = DB.products.reduce((sum,p)=>sum+Number(p.stock)*Number(p.last_unit_cost),0);
   const rows = DB.products.map(p=>{
     const cost = Number(p.last_unit_cost) || recipeCostPerUnit(p.id);
     const margin = p.price>0 ? ((p.price-cost)/p.price*100) : 0;
-    return `<tr><td>${p.name}</td><td>${fmtBRL(p.price)}</td><td>${fmtBRL(cost)}</td>
-      <td style="color:${margin>=0?'var(--good)':'var(--bad)'}">${margin.toFixed(0)}%</td><td>${p.stock} un</td></tr>`;
+    return `<tr><td><input class="sheet-input prod-name" data-id="${p.id}" value="${p.name.replace(/"/g,'&quot;')}"></td><td><input class="sheet-input prod-price" data-id="${p.id}" type="number" min="0" step="0.01" value="${Number(p.price)}"></td><td>${fmtBRL(cost)}</td>
+      <td style="color:${margin>=0?'var(--good)':'var(--bad)'}">${margin.toFixed(0)}%</td><td>${p.stock} un</td><td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td><td class="sheet-actions"><button class="secondary save-product" data-id="${p.id}" type="button">Salvar</button></td></tr>`;
   }).join('');
   return `
   <div class="card"><h2>Novo produto</h2>
@@ -825,7 +855,7 @@ function renderProdutos(){
     </form>
   </div>
   <div class="card"><h2>Produtos cadastrados</h2>
-    ${DB.products.length ? `<table><tr><th>Nome</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Estoque</th></tr>${rows}</table>` : '<div class="empty">Nenhum produto cadastrado.</div>'}
+    ${DB.products.length ? `<div class="summary-note">Valor total dos produtos acabados em estoque: <b>${fmtBRL(totalValue)}</b></div><div class="report-table-wrap"><table><tr><th>Nome</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Quantidade</th><th>Valor total</th><th></th></tr>${rows}<tr class="sheet-total"><td colspan="5">Total em estoque</td><td>${fmtBRL(totalValue)}</td><td></td></tr></table></div>` : '<div class="empty">Nenhum produto cadastrado.</div>'}
   </div>`;
 }
 
@@ -911,6 +941,8 @@ function renderProducao(){
 }
 
 function renderEstoque(){
+  const ingredientsTotal = DB.ingredients.reduce((total,i)=>total+Number(i.stock)*Number(i.avg_cost),0);
+  const productsTotal = DB.products.reduce((total,p)=>total+Number(p.stock)*Number(p.last_unit_cost),0);
   const ingRows = DB.ingredients.map(i=>`<tr><td>${i.name}</td><td>${displayQty(Number(i.stock),i.family)}</td>
     <td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td>
     <td>${Number(i.min_stock)>0 && Number(i.stock)<Number(i.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td></tr>`).join('');
@@ -919,10 +951,11 @@ function renderEstoque(){
     <td>${Number(p.min_stock)>0 && Number(p.stock)<Number(p.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td></tr>`).join('');
   return `
   <div class="card"><h2>Estoque de ingredientes</h2>
-    ${DB.ingredients.length ? `<table><tr><th>Item</th><th>Qtd</th><th>Valor</th><th>Status</th></tr>${ingRows}</table>` : '<div class="empty">Sem ingredientes.</div>'}
+    ${DB.ingredients.length ? `<div class="summary-note">Quantidade de ingredientes: <b>${DB.ingredients.length}</b> · Valor total: <b>${fmtBRL(ingredientsTotal)}</b></div><div class="report-table-wrap"><table><tr><th>Item</th><th>Quantidade</th><th>Valor total</th><th>Status</th></tr>${ingRows}<tr class="sheet-total"><td colspan="2">Total ingredientes</td><td>${fmtBRL(ingredientsTotal)}</td><td></td></tr></table></div>` : '<div class="empty">Sem ingredientes.</div>'}
   </div>
   <div class="card"><h2>Estoque de produtos acabados</h2>
-    ${DB.products.length ? `<table><tr><th>Item</th><th>Qtd</th><th>Valor</th><th>Status</th></tr>${prodRows}</table>` : '<div class="empty">Sem produtos.</div>'}
+    ${DB.products.length ? `<div class="summary-note">Quantidade de produtos: <b>${DB.products.length}</b> · Valor total: <b>${fmtBRL(productsTotal)}</b></div><div class="report-table-wrap"><table><tr><th>Item</th><th>Quantidade</th><th>Valor total</th><th>Status</th></tr>${prodRows}<tr class="sheet-total"><td colspan="2">Total produtos</td><td>${fmtBRL(productsTotal)}</td><td></td></tr></table></div>` : '<div class="empty">Sem produtos.</div>'}
+  <div class="card"><h2>Valor total do estoque</h2><div class="kpi"><div class="label">Ingredientes + produtos acabados</div><div class="value">${fmtBRL(ingredientsTotal+productsTotal)}</div></div></div>
   </div>`;
 }
 
@@ -1104,6 +1137,28 @@ function updateSaleTotalPreview(){
 
 // ===================== HANDLERS =====================
 function attachHandlers(){
+  document.querySelectorAll('.save-ingredient').forEach(btn=>btn.onclick = async e=>{
+    const id = e.currentTarget.dataset.id;
+    const result = await updateIngredient(id, document.querySelector('.ing-name[data-id="'+id+'"]')?.value, document.querySelector('.ing-min[data-id="'+id+'"]')?.value);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    toast('Ingrediente atualizado!'); render();
+  });
+  document.querySelectorAll('.save-product').forEach(btn=>btn.onclick = async e=>{
+    const id = e.currentTarget.dataset.id;
+    const result = await updateProduct(id, document.querySelector('.prod-name[data-id="'+id+'"]')?.value, document.querySelector('.prod-price[data-id="'+id+'"]')?.value, Number(getProduct(id)?.min_stock)||0);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    toast('Produto atualizado!'); render();
+  });
+  const addIngredientFromPurchase = document.getElementById('addIngredientFromPurchase');
+  if(addIngredientFromPurchase) addIngredientFromPurchase.onclick = async ()=>{
+    const name = prompt('Nome do ingrediente ou insumo:');
+    if(!name?.trim()) return;
+    const unit = prompt('Unidade: kg, g, l, ml ou un','un')?.trim().toLowerCase();
+    if(!UNIT_FAMILY[unit]){ toast('Unidade inválida. Use kg, g, l, ml ou un.'); return; }
+    const result = await registerIngredient(name, unit, 0);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    toast('Ingrediente criado. Ele já pode ser selecionado na compra.'); render();
+  };
   const openReports = document.getElementById('openReports');
   if(openReports) openReports.onclick = ()=>{
     activeTab = 'relatorios';

@@ -855,7 +855,7 @@ function renderCompras(){
       <label>Mercado / fornecedor / local</label><input name="supplierName" required placeholder="Ex: Atacadão, Casa das Embalagens">
       <label>Itens da compra</label>
       <div id="purchaseItemsList"></div>
-      <button class="secondary" id="addPurchaseItem" type="button">+ Adicionar item</button>
+      <button class="secondary" id="addPurchaseItem" type="button">+ Adicionar item cadastrado</button>
       <button class="secondary" id="addIngredientFromPurchase" type="button">+ Cadastrar item</button>
       <div class="row" style="margin-top:8px;">
         <div><label>Valor total da compra (R$)</label><input id="purchaseTotal" name="totalCost" type="number" min="0" step="0.01" placeholder="300,00" required></div>
@@ -1230,8 +1230,17 @@ function attachHandlers(){
     refreshPurchaseItemsList();
     addPurchaseItem.onclick = ()=>{
       syncPurchaseDraftFromDom();
-      const firstIngredient = DB.ingredients[0];
-      purchaseDraftItems.push({ingredientId:firstIngredient?.id, purchaseQty:'', purchaseUnit:'pacote', contentQty:1, contentUnit:firstIngredient?.unit||'un', totalCost:''});
+      if(!DB.ingredients.length){ toast('Cadastre um item primeiro.'); return; }
+      const list = DB.ingredients.map((item,index)=>`${index+1} - ${item.name}`).join('\n');
+      const choice = prompt('Digite o número ou o nome do item já cadastrado:\n\n'+list);
+      if(!choice?.trim()) return;
+      const normalized = choice.trim().toLowerCase();
+      const byNumber = Number.parseInt(normalized,10);
+      const selected = Number.isInteger(byNumber) && byNumber>=1 && byNumber<=DB.ingredients.length
+        ? DB.ingredients[byNumber-1]
+        : DB.ingredients.find(item=>item.name.trim().toLowerCase()===normalized);
+      if(!selected){ toast('Item não encontrado. Escolha um número da lista ou digite o nome exato.'); return; }
+      purchaseDraftItems.push({ingredientId:selected.id,purchaseQty:'',purchaseUnit:'pacote',contentQty:1,contentUnit:selected.unit,totalCost:''});
       refreshPurchaseItemsList();
     };
   }

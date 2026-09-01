@@ -56,7 +56,7 @@
   .sale-line{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
   .sale-line select{flex:2;}
   .sale-line input{flex:1;}
-  .purchase-item{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:6px;align-items:end;background:#faf7f2;padding:8px;border-radius:8px;margin-bottom:6px;}
+  .purchase-item{display:grid;grid-template-columns:2fr repeat(5,1fr) auto;gap:6px;align-items:end;background:#faf7f2;padding:8px;border-radius:8px;margin-bottom:6px;}
   .purchase-item label{display:block;margin-bottom:4px;}
   .report-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:end;}
   .report-toolbar .field{flex:1;min-width:130px;}
@@ -381,15 +381,19 @@ async function registerPurchaseBatch(purchaseDate, purchaseCategory, supplierNam
   const total = Number(totalCost);
   const validItems = Array.isArray(items) ? items.map(item=>({
     ingredient_id:item.ingredientId,
-    qty:Number(item.qty),
-    unit:item.unit,
+    purchase_qty:Number(item.purchaseQty ?? item.qty),
+    purchase_unit:item.purchaseUnit || item.unit,
+    content_qty:Number(item.contentQty ?? 1),
+    content_unit:item.contentUnit || item.unit,
+    qty:Number(item.purchaseQty ?? item.qty) * Number(item.contentQty ?? 1),
+    unit:item.contentUnit || item.unit,
     total_cost:Math.round(Number(item.totalCost)*100)/100
   })) : [];
   if(!purchaseDate) return failedResult({message:'Informe a data da compra.'});
   if(!cleanSupplier) return failedResult({message:'Informe o mercado, fornecedor ou local da compra.'});
   if(!(total>=0)) return failedResult({message:'Informe um valor total válido.'});
   if(!validItems.length) return failedResult({message:'Adicione ao menos um item à compra.'});
-  if(validItems.some(item=>!getIngredient(item.ingredient_id) || !(item.qty>0) || !(item.total_cost>=0) || !UNIT_FAMILY[item.unit])){
+  if(validItems.some(item=>!getIngredient(item.ingredient_id) || !(item.purchase_qty>0) || !(item.content_qty>0) || !(item.qty>0) || !(item.total_cost>=0) || !UNIT_FAMILY[item.unit])){
     return failedResult({message:'Revise os ingredientes, quantidades, unidades e valores dos itens.'});
   }
   const itemSum = Math.round(validItems.reduce((sum,item)=>sum+item.total_cost,0)*100)/100;
@@ -757,15 +761,20 @@ let purchaseDraftItems = [];
 function renderPurchaseItemRow(idx, item){
   const ing = getIngredient(item?.ingredientId) || DB.ingredients[0];
   const ingOptions = DB.ingredients.map(i=>`<option value="${i.id}" ${item&&item.ingredientId===i.id?'selected':''}>${i.name}</option>`).join('');
-  const selectedUnit = item?.unit || ing?.unit || 'un';
+  const selectedUnit = item?.contentUnit || item?.unit || ing?.unit || 'un';
+  const purchaseQty = item?.purchaseQty ?? item?.qty ?? '';
+  const contentQty = item?.contentQty ?? 1;
+  const purchaseUnit = item?.purchaseUnit || 'pacote';
+  const unitCost = Number(item?.totalCost)>0 && Number(purchaseQty)>0 ? Number(item.totalCost)/Number(purchaseQty) : 0;
   return `<div class="purchase-item" data-idx="${idx}">
-    <div><label>Ingrediente</label><select class="pi-ingredient" required>${ingOptions}</select></div>
-    <div><label>Quantidade</label><input class="pi-qty" type="number" min="0" step="any" placeholder="Qtd" value="${item?.qty||''}" required></div>
-    <div><label>Unidade</label><select class="pi-unit" required>
-      <option value="kg" ${selectedUnit==='kg'?'selected':''}>kg</option><option value="g" ${selectedUnit==='g'?'selected':''}>g</option>
-      <option value="l" ${selectedUnit==='l'?'selected':''}>L</option><option value="ml" ${selectedUnit==='ml'?'selected':''}>ml</option><option value="un" ${selectedUnit==='un'?'selected':''}>un</option>
+    <div><label>Ingrediente / insumo</label><select class="pi-ingredient" required>${ingOptions}</select></div>
+    <div><label>Qtd. de embalagens</label><input class="pi-purchase-qty" type="number" min="0" step="any" placeholder="Ex: 5" value="${purchaseQty}" required></div>
+    <div><label>Embalagem</label><select class="pi-purchase-unit"><option ${purchaseUnit==='pacote'?'selected':''}>pacote</option><option ${purchaseUnit==='caixa'?'selected':''}>caixa</option><option ${purchaseUnit==='saco'?'selected':''}>saco</option><option ${purchaseUnit==='fardo'?'selected':''}>fardo</option><option ${purchaseUnit==='bandeja'?'selected':''}>bandeja</option></select></div>
+    <div><label>Conteúdo por embalagem</label><input class="pi-content-qty" type="number" min="0" step="any" value="${contentQty}" required></div>
+    <div><label>Unidade do conteúdo</label><select class="pi-content-unit" required>
+      <option value="kg" ${selectedUnit==='kg'?'selected':''}>kg</option><option value="g" ${selectedUnit==='g'?'selected':''}>g</option><option value="l" ${selectedUnit==='l'?'selected':''}>L</option><option value="ml" ${selectedUnit==='ml'?'selected':''}>ml</option><option value="un" ${selectedUnit==='un'?'selected':''}>un</option>
     </select></div>
-    <div><label>Valor do item (R$)</label><input class="pi-total" type="number" min="0" step="0.01" placeholder="0,00" value="${item?.totalCost??''}" required></div>
+    <div><label>Valor total do item (R$)</label><input class="pi-total" type="number" min="0" step="0.01" placeholder="0,00" value="${item?.totalCost??''}" required><small class="pi-unit-cost muted">${unitCost ? fmtBRL(unitCost)+' por embalagem' : ''}</small></div>
     <button type="button" class="danger pi-remove" aria-label="Remover item">✕</button>
   </div>`;
 }
@@ -784,10 +793,16 @@ function refreshPurchaseItemsList(){
     sel.addEventListener('change', e=>{
       const row = e.currentTarget.closest('.purchase-item');
       const ing = getIngredient(e.currentTarget.value);
-      if(ing) row.querySelector('.pi-unit').value = ing.unit;
+      if(ing) row.querySelector('.pi-content-unit').value = ing.unit;
     });
   });
-  container.querySelectorAll('.pi-qty,.pi-total').forEach(input=>input.addEventListener('input', updatePurchaseItemsSum));
+  container.querySelectorAll('.pi-total,.pi-purchase-qty,.pi-content-qty').forEach(input=>input.addEventListener('input', ()=>{
+    const row=input.closest('.purchase-item');
+    const qty=Number(row.querySelector('.pi-purchase-qty').value)||0;
+    const total=Number(row.querySelector('.pi-total').value)||0;
+    row.querySelector('.pi-unit-cost').textContent=qty&&total ? fmtBRL(total/qty)+' por embalagem' : '';
+    updatePurchaseItemsSum();
+  }));
   updatePurchaseItemsSum();
 }
 function updatePurchaseItemsSum(){
@@ -799,19 +814,26 @@ function renderPurchaseBatch(batch){
   const categoryLabels = {mercado:'Mercado', casa_embalagens:'Casa de embalagens', outro:'Outro'};
   const itemRows = (batch.items||[]).map(item=>{
     const ing = getIngredient(item.ingredient_id);
-    return `<tr><td>${ing?ing.name:'Ingrediente removido'}</td><td>${item.qty} ${item.unit}</td><td>${fmtBRL(item.total_cost)}</td></tr>`;
+    const purchaseQty = item.purchase_qty ?? item.qty;
+    const purchaseUnit = item.purchase_unit || item.unit;
+    const contentQty = item.content_qty ?? 1;
+    const contentUnit = item.content_unit || item.unit;
+    const stockQty = item.qty+' '+item.unit;
+    const unitCost = Number(purchaseQty)>0 ? Number(item.total_cost)/Number(purchaseQty) : 0;
+    const baseCost = Number(item.qty_base)>0 ? Number(item.total_cost)/Number(item.qty_base) : 0;
+    return `<tr><td>${ing?ing.name:'Ingrediente removido'}</td><td>${purchaseQty} ${purchaseUnit} × ${contentQty} ${contentUnit}</td><td>${stockQty}</td><td>${fmtBRL(unitCost)} / embalagem</td><td>${fmtBRL(baseCost)} / unidade-base</td><td>${fmtBRL(item.total_cost)}</td></tr>`;
   }).join('');
   return `<div class="purchase-entry">
     <div class="purchase-entry-head"><div><div class="purchase-entry-title">${fmtDate(batch.purchase_date)} · ${batch.supplier_name}</div><div class="muted">${categoryLabels[batch.purchase_category]||'Compra'}${batch.receipt_reference?' · Nota: '+batch.receipt_reference:''}</div></div><div class="purchase-entry-total">${fmtBRL(batch.total_cost)}</div></div>
     ${batch.note?`<div class="muted" style="margin-top:6px;">${batch.note}</div>`:''}
-    ${itemRows?`<div class="report-table-wrap"><table><tr><th>Item</th><th>Quantidade</th><th>Valor</th></tr>${itemRows}</table></div>`:'<div class="empty">Nenhum item detalhado.</div>'}
+    ${itemRows?`<div class="report-table-wrap"><table><tr><th>Item</th><th>Compra</th><th>Vai para estoque</th><th>Custo/embalagem</th><th>Custo/un. base</th><th>Total</th></tr>${itemRows}</table></div>`:'<div class="empty">Nenhum item detalhado.</div>'}
   </div>`;
 }
 function renderCompras(){
   const batches = DB.purchaseBatches||[];
   return `
   <div class="card"><h2>Nova compra / entrada de caixa</h2>
-    <div class="summary-note">Cadastre uma ida ao mercado ou fornecedor como um único lançamento. Depois, informe cada item separadamente. O total da compra precisa ser exatamente igual à soma dos itens para atualizar o estoque e o caixa corretamente.</div>
+    <div class="summary-note">Informe a compra como veio na nota. Exemplo: <b>3 pacotes</b>, com <b>1 kg por pacote</b>, valor total <b>R$ 90,00</b>. O sistema converte automaticamente para <b>3 kg no estoque</b>, calcula o custo por kg e usa esse valor para calcular qualquer quantidade da receita, como 200 g.</div>
     <form id="form-compra" style="margin-top:12px;">
       <div class="row">
         <div><label>Data da compra</label><input name="date" type="date" value="${todayISO()}" required></div>
@@ -1040,7 +1062,7 @@ function renderReportPurchases(data){
   const categoryRows=Object.entries(data.categories).map(([category,total])=>`<tr><td>${labels[category]||category}</td><td>${fmtBRL(total)}</td></tr>`).join('');
   const entries=data.purchaseEntries.map(entry=>`<div class="purchase-entry">
     <div class="purchase-entry-head"><div><div class="purchase-entry-title">${fmtDate(entry.purchase_date)} · ${entry.supplier_name}</div><div class="muted">${labels[entry.purchase_category]||'Compra'}${entry.receipt_reference?' · Nota: '+entry.receipt_reference:''}</div></div><div class="purchase-entry-total">${fmtBRL(entry.total_cost)}</div></div>
-    <div class="report-table-wrap"><table><tr><th>Item</th><th>Quantidade</th><th>Valor</th></tr>${(entry.items||[]).map(item=>{const ing=getIngredient(item.ingredient_id);return `<tr><td>${ing?ing.name:'Ingrediente removido'}</td><td>${item.qty} ${item.unit}</td><td>${fmtBRL(item.total_cost)}</td></tr>`;}).join('')}</table></div>
+    <div class="report-table-wrap"><table><tr><th>Item</th><th>Compra</th><th>Estoque</th><th>Custo unitário</th><th>Valor</th></tr>${(entry.items||[]).map(item=>{const ing=getIngredient(item.ingredient_id);const pq=item.purchase_qty??item.qty;const pu=item.purchase_unit||item.unit;const cq=item.content_qty??1;const cu=item.content_unit||item.unit;const unitCost=Number(pq)>0?Number(item.total_cost)/Number(pq):0;return `<tr><td>${ing?ing.name:'Ingrediente removido'}</td><td>${pq} ${pu} × ${cq} ${cu}</td><td>${item.qty} ${item.unit}</td><td>${fmtBRL(unitCost)} / embalagem</td><td>${fmtBRL(item.total_cost)}</td></tr>`;}).join('')}</table></div>
   </div>`).join('');
   return `<div class="card report-section"><h3>Compras e caixa</h3><div class="grid"><div class="kpi"><div class="label">Total comprado</div><div class="value">${fmtBRL(data.purchaseTotal)}</div></div><div class="kpi"><div class="label">Quantidade de compras</div><div class="value">${data.purchaseCount}</div></div></div>${categoryRows?`<div class="report-table-wrap"><table><tr><th>Origem</th><th>Total</th></tr>${categoryRows}</table></div>`:''}${entries||'<div class="empty">Nenhuma compra no período.</div>'}</div>`;
 }
@@ -1188,12 +1210,12 @@ function attachHandlers(){
   if(addPurchaseItem){
     if(!purchaseDraftItems.length){
       const firstIngredient = DB.ingredients[0];
-      purchaseDraftItems.push({ingredientId:firstIngredient?.id, qty:'', unit:firstIngredient?.unit||'un', totalCost:''});
+      purchaseDraftItems.push({ingredientId:firstIngredient?.id, purchaseQty:'', purchaseUnit:'pacote', contentQty:1, contentUnit:firstIngredient?.unit||'un', totalCost:''});
     }
     refreshPurchaseItemsList();
     addPurchaseItem.onclick = ()=>{
       const firstIngredient = DB.ingredients[0];
-      purchaseDraftItems.push({ingredientId:firstIngredient?.id, qty:'', unit:firstIngredient?.unit||'un', totalCost:''});
+      purchaseDraftItems.push({ingredientId:firstIngredient?.id, purchaseQty:'', purchaseUnit:'pacote', contentQty:1, contentUnit:firstIngredient?.unit||'un', totalCost:''});
       refreshPurchaseItemsList();
     };
   }
@@ -1203,8 +1225,10 @@ function attachHandlers(){
     const f = new FormData(fc);
     const items = [...fc.querySelectorAll('.purchase-item')].map(row=>({
       ingredientId:row.querySelector('.pi-ingredient').value,
-      qty:parseFloat(row.querySelector('.pi-qty').value),
-      unit:row.querySelector('.pi-unit').value,
+      purchaseQty:parseFloat(row.querySelector('.pi-purchase-qty').value),
+      purchaseUnit:row.querySelector('.pi-purchase-unit').value,
+      contentQty:parseFloat(row.querySelector('.pi-content-qty').value),
+      contentUnit:row.querySelector('.pi-content-unit').value,
       totalCost:parseFloat(row.querySelector('.pi-total').value)
     }));
     const totalInput = document.getElementById('purchaseTotal');

@@ -1184,6 +1184,12 @@ function updateSaleTotalPreview(){
 
 // ===================== HANDLERS =====================
 function attachHandlers(){
+  if(!window.__purchaseAddItemBound){
+    document.addEventListener('click', e=>{
+      if(e.target.closest('#addPurchaseItem')) addPurchaseDraftItem(e);
+    });
+    window.__purchaseAddItemBound = true;
+  }
   document.querySelectorAll('.save-ingredient').forEach(btn=>btn.onclick = async e=>{
     const id = e.currentTarget.dataset.id;
     const result = await updateIngredient(id, document.querySelector('.ing-name[data-id="'+id+'"]')?.value, document.querySelector('.ing-min[data-id="'+id+'"]')?.value);
@@ -1240,7 +1246,7 @@ function attachHandlers(){
       purchaseDraftItems.push({ingredientId:firstIngredient?.id, purchaseQty:'', purchaseUnit:'pacote', contentQty:1, contentUnit:firstIngredient?.unit||'un', totalCost:''});
     }
     refreshPurchaseItemsList();
-    addPurchaseItem.addEventListener('click', addPurchaseDraftItem);
+    addPurchaseItem.onclick = null;
   }
   const fc = document.getElementById('form-compra');
   if(fc) fc.onsubmit = async (e)=>{

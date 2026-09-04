@@ -35,3 +35,6 @@
 - [ ] Confirmar que o `main` contém o projeto React/Vite completo e não apenas o HTML antigo
 - [ ] Confirmar que a Vercel deteta o push no `main` e gera o novo deployment automaticamente
 - [ ] Verificar a URL de produção após a atualização automática
+- [ ] Confirmar a identidade de e-mail/noreply associada à conta GitHub correta
+- [ ] Corrigir a autoria dos commits enviados ao `main` sem alterar o conteúdo do projeto
+- [ ] Confirmar novo push no `main` e verificar o deployment automático da Vercel

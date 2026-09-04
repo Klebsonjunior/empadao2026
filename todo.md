@@ -1,0 +1,33 @@
+# Project TODO
+
+- [x] Confirm the exact Supabase project reference and inventory all sites/domains using it
+- [x] Map existing sites to companies/tenants without mixing Empadão and Brigadeiros data
+- [x] Design the domain-to-company and user-to-company data model
+- [x] Create a non-destructive migration plan for legacy user-scoped records
+- [x] Add company/tenant association and secure RLS policies
+- [x] Update purchase RPCs and all writes to use company scope plus optional audit user
+- [x] Add same-company user sharing while preserving individual authentication
+- [ ] Add basic user invitation/management flow with administrator and common-user roles
+- [ ] Validate João/Silvana shared visibility on empadao2026.vercel.app
+- [ ] Validate isolation between Empadão, Brigadeiros, and future customer domains
+- [ ] Document deployment, migration order, rollback precautions, and verification steps
+- [x] Confirmar que os registos criados por `contato.jejr@gmail.com` pertencem exclusivamente à empresa Brigadeiros antes da migração
+- [x] Confirmar que os registos de Empadão pertencem exclusivamente à empresa Empadão antes da migração
+- [ ] Obter acesso ao repositório clonado do Brigadeiros ou ao seu código/configuração para confirmar a origem do domínio
+- [ ] Garantir que novos domínios sejam associados a uma empresa no onboarding, sem depender apenas de utilizadores autenticados
+- [ ] Migrar o frontend monolítico `index.html` para React/Vite por módulos, preservando as funcionalidades atuais
+- [ ] Manter a Vercel como destino de deploy e configurar os domínios personalizados por cliente
+- [x] Criar um contexto de empresa resolvido pelo hostname atual
+- [x] Migrar o frontend apenas depois de definir a associação segura entre domínio, empresa e utilizador
+- [x] Não executar SQL destrutivo nem alterar dados reais antes da confirmação do mapeamento Empadão/Brigadeiros
+- [ ] Migrar o módulo Dashboard completo do HTML legado para React/Vite
+- [ ] Migrar Compras, Vendas, Estoque, Produção e Relatórios para componentes React
+- [ ] Preservar todas as operações de escrita e filtros de empresa durante a migração dos módulos
+- [ ] Adicionar gestão de membros e convites por empresa com fluxo administrativo seguro
+- [ ] Validar o build React completo antes de substituir o site legado na Vercel
+- [x] Validar o build de produção exatamente com o comando esperado pela Vercel
+- [x] Definir `build`, `outputDirectory` e `installCommand` compatíveis com Vite na configuração da Vercel
+- [x] Documentar `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` como variáveis públicas de build
+- [x] Confirmar que nenhuma chave `service_role` ou segredo administrativo chega ao bundle do browser
+- [x] Testar rotas, fallback de assets e deep links no hosting estático da Vercel
+- [ ] Verificar comportamento em ambos os domínios personalizados e no domínio `.vercel.app`

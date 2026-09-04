@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle Empadões</title>
+<style>
+  :root{
+    --bg:#f4f1ea; --card:#ffffff; --ink:#2b2420; --sub:#8a7f72;
+    --accent:#b5502f; --accent-dark:#8c3c22; --good:#3f7d4f; --bad:#c0392b;
+    --border:#e6e0d6; --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);}
+  header{background:var(--accent);color:#fff;padding:16px 18px;position:sticky;top:0;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.1);display:flex;justify-content:space-between;align-items:center;}
+  header h1{margin:0;font-size:18px;font-weight:700;}
+  header p{margin:2px 0 0;font-size:12px;opacity:.85;}
+  header button.logout{background:rgba(255,255,255,.15);border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;}
+  nav{display:flex;overflow-x:auto;background:var(--accent-dark);position:sticky;top:56px;z-index:9;-webkit-overflow-scrolling:touch;}
+  nav button{flex:0 0 auto;background:none;border:none;color:#f0e4dd;padding:12px 14px;font-size:13px;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;}
+  nav button.active{color:#fff;border-bottom:3px solid #fff;font-weight:600;}
+  main{padding:14px;max-width:900px;margin:0 auto;padding-bottom:80px;}
+  .tab{display:none;}
+  .tab.active{display:block;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+  .card h2{margin:0 0 12px;font-size:15px;color:var(--accent-dark);}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;}
+  .kpi .label{font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.03em;}
+  .kpi .value{font-size:20px;font-weight:700;margin-top:4px;}
+  .kpi .value.good{color:var(--good);}
+  .kpi .value.bad{color:var(--bad);}
+  form{display:flex;flex-direction:column;gap:8px;}
+  label{font-size:12px;color:var(--sub);font-weight:600;}
+  input,select{padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:#fff;color:var(--ink);width:100%;}
+  .row{display:flex;gap:8px;}
+  .row > *{flex:1;}
+  button.primary{background:var(--accent);color:#fff;border:none;padding:12px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;}
+  button.primary:disabled{opacity:.5;}
+  button.primary:active{background:var(--accent-dark);}
+  button.secondary{background:#efe7db;color:var(--accent-dark);border:none;padding:8px 12px;border-radius:8px;font-size:12px;cursor:pointer;}
+  button.danger{background:#fbe9e7;color:var(--bad);border:none;padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+  th{text-align:left;color:var(--sub);font-size:11px;text-transform:uppercase;padding:6px 4px;border-bottom:1px solid var(--border);}
+  td{padding:8px 4px;border-bottom:1px solid var(--border);}
+  .empty{color:var(--sub);font-size:13px;padding:12px 0;text-align:center;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+  .badge.low{background:#fbe9e7;color:var(--bad);}
+  .badge.ok{background:#e8f3ea;color:var(--good);}
+  .recipe-item{display:flex;gap:6px;align-items:center;background:#faf7f2;padding:8px;border-radius:8px;margin-bottom:6px;}
+  .recipe-item select{flex:2;}
+  .recipe-item input{flex:1;}
+  .muted{color:var(--sub);font-size:12px;}
+  #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;}
+  #toast.show{opacity:1;}
+  .sale-line{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
+  .sale-line select{flex:2;}
+  .sale-line input{flex:1;}
+  .purchase-item{display:grid;grid-template-columns:2fr repeat(5,1fr) auto;gap:6px;align-items:end;background:#faf7f2;padding:8px;border-radius:8px;margin-bottom:6px;}
+  .purchase-item label{display:block;margin-bottom:4px;}
+  .report-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:end;}
+  .report-toolbar .field{flex:1;min-width:130px;}
+  .report-toolbar .presets{display:flex;gap:6px;flex-wrap:wrap;}
+  .report-toolbar button.active{background:var(--accent);color:#fff;}
+  .report-section{margin-top:14px;}
+  .report-section h3{font-size:14px;color:var(--accent-dark);margin:0 0 8px;}
+  .report-table-wrap{overflow-x:auto;}
+  .purchase-entry{border:1px solid var(--border);border-radius:10px;padding:10px;margin:8px 0;background:#fff;}
+  .purchase-entry-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;}
+  .purchase-entry-title{font-weight:700;}
+  .purchase-entry-total{font-weight:700;color:var(--accent-dark);font-size:15px;white-space:nowrap;}
+  .purchase-entry table{margin-top:8px;}
+  .summary-note{background:#faf7f2;border-radius:8px;padding:10px;font-size:12px;color:var(--sub);}
+  .sheet-input{padding:6px 8px;font-size:13px;min-width:110px;}
+  .sheet-actions{white-space:nowrap;}
+  .sheet-total{font-weight:700;background:#faf7f2;}
+  .print-only{display:none;}
+  .loading{text-align:center;padding:60px 20px;color:var(--sub);}
+  @media(max-width:620px){
+    .purchase-item{grid-template-columns:1fr 1fr;}
+    .purchase-item > :first-child{grid-column:1 / -1;}
+    .purchase-item > .danger{align-self:center;}
+  }
+  @media print{
+    body{background:#fff;}
+    header,nav,#toast,.no-print{display:none!important;}
+    main{max-width:none;padding:0;}
+    .card,.kpi{border:1px solid #bbb;break-inside:avoid;}
+    .print-only{display:block;}
+  }
+  #authScreen{max-width:360px;margin:60px auto;padding:0 20px;}
+  #authScreen .card{padding:24px;}
+  #authScreen h1{text-align:center;font-size:20px;margin-bottom:4px;}
+  #authScreen p.sub{text-align:center;color:var(--sub);font-size:13px;margin-bottom:20px;}
+  .auth-toggle{text-align:center;font-size:12px;margin-top:12px;color:var(--sub);}
+  .auth-toggle a{color:var(--accent);text-decoration:none;font-weight:600;cursor:pointer;}
+  .auth-error{color:var(--bad);font-size:12px;text-align:center;}
+  #appRoot{display:none;}
+</style>
+</head>
+<body>
+
+<div id="authScreen">
+  <h1>🥧 Controle Empadões</h1>
+  <p class="sub">Custo · Estoque · Vendas</p>
+  <div class="card">
+    <form id="authForm">
+      <label>E-mail</label>
+      <input type="email" id="authEmail" required autocomplete="username">
+      <label>Senha</label>
+      <input type="password" id="authPassword" required autocomplete="current-password" minlength="6">
+      <div id="authError" class="auth-error"></div>
+      <button class="primary" type="submit" id="authSubmitBtn">Entrar</button>
+    </form>
+    <div class="auth-toggle" id="authToggle">Ainda não tem conta? <a id="authToggleLink">Criar conta</a></div>
+  </div>
+</div>
+
+<div id="appRoot">
+  <header>
+    <div>
+      <h1>🥧 Controle Empadões</h1>
+      <p id="subtitle"></p>
+    </div>
+    <button class="logout" id="logoutBtn">Sair</button>
+  </header>
+
+  <nav id="nav">
+    <button data-tab="dashboard" class="active">Dashboard</button>
+    <button data-tab="vendas">Vendas</button>
+    <button data-tab="producao">Produção</button>
+    <button data-tab="estoque">Estoque</button>
+    <button data-tab="produtos">Produtos</button>
+    <button data-tab="fichas">Fichas Técnicas</button>
+    <button data-tab="ingredientes">Ingredientes</button>
+    <button data-tab="compras">Compras</button>
+    <button data-tab="relatorios">Relatórios</button>
+  </nav>
+
+  <main id="main"><div class="loading">Carregando dados...</div></main>
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// ===================== SUPABASE CONFIG =====================
+const SUPABASE_URL = 'https://hfeotdvlrmxvlecybmyc.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_vqqUlJE6dzArbUDguGej_w_6Tsd4P0i';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ===================== UTIL =====================
+const fmtBRL = v => (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('pt-BR');
+const todayISO = () => {
+  const now = new Date();
+  const tz = new Date(now.toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
+  return tz.toISOString().slice(0,10);
+};
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2400);
+}
+function errorMessage(error, fallback='Não foi possível concluir a operação.'){
+  if(!error) return fallback;
+  if(error.code==='42501') return 'Sem permissão para salvar estes dados. Faça login novamente.';
+  if(error.code==='PGRST205') return 'A estrutura do banco não está disponível. Verifique a migração do Supabase.';
+  return error.message || fallback;
+}
+function failedResult(error, fallback){
+  return {ok:false, msg:errorMessage(error, fallback), error};
+}
+
+const UNIT_FAMILY = {kg:'peso', g:'peso', l:'volume', ml:'volume', un:'unidade'};
+const TO_BASE = {kg:1000, g:1, l:1000, ml:1, un:1};
+const BASE_LABEL = {peso:'g', volume:'ml', unidade:'un'};
+function convertToBase(qty, unit){ return qty * TO_BASE[unit]; }
+function displayQty(baseQty, family){
+  if(family==='peso') return baseQty>=1000 ? (baseQty/1000).toFixed(3).replace(/\.?0+$/,'')+' kg' : baseQty.toFixed(0)+' g';
+  if(family==='volume') return baseQty>=1000 ? (baseQty/1000).toFixed(3).replace(/\.?0+$/,'')+' L' : baseQty.toFixed(0)+' ml';
+  return baseQty.toFixed(baseQty%1===0?0:2)+' un';
+}
+function displayCostPerBase(cost, family){
+  if(family==='peso') return fmtBRL(cost*1000)+' /kg';
+  if(family==='volume') return fmtBRL(cost*1000)+' /L';
+  return fmtBRL(cost)+' /un';
+}
+
+// ===================== AUTH =====================
+let authMode = 'login';
+const authForm = document.getElementById('authForm');
+const authToggleLink = document.getElementById('authToggleLink');
+const authToggleText = document.getElementById('authToggle');
+const authError = document.getElementById('authError');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+
+authToggleLink.onclick = ()=>{
+  authMode = authMode==='login' ? 'signup' : 'login';
+  authSubmitBtn.textContent = authMode==='login' ? 'Entrar' : 'Criar conta';
+  authToggleText.innerHTML = authMode==='login'
+    ? 'Ainda não tem conta? <a id="authToggleLink">Criar conta</a>'
+    : 'Já tem conta? <a id="authToggleLink">Entrar</a>';
+  document.getElementById('authToggleLink').onclick = authToggleLink.onclick;
+  authError.textContent='';
+};
+
+authForm.onsubmit = async (e)=>{
+  e.preventDefault();
+  authError.textContent='';
+  authSubmitBtn.disabled = true;
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  try{
+    if(authMode==='login'){
+      const {error} = await supabase.auth.signInWithPassword({email,password});
+      if(error) throw error;
+    } else {
+      const {error} = await supabase.auth.signUp({email,password});
+      if(error) throw error;
+      authError.style.color='var(--good)';
+      authError.textContent='Conta criada! Se pedir confirmação por e-mail, confirme e faça login.';
+      authSubmitBtn.disabled = false;
+      return;
+    }
+  }catch(err){
+    authError.style.color='var(--bad)';
+    authError.textContent = err.message || 'Erro ao autenticar.';
+  }
+  authSubmitBtn.disabled = false;
+};
+
+document.getElementById('logoutBtn').onclick = async ()=>{
+  await supabase.auth.signOut();
+  location.reload();
+};
+
+supabase.auth.onAuthStateChange((event, session)=>{
+  if(session){
+    document.getElementById('authScreen').style.display='none';
+    document.getElementById('appRoot').style.display='block';
+    boot();
+  } else {
+    document.getElementById('authScreen').style.display='block';
+    document.getElementById('appRoot').style.display='none';
+  }
+});
+
+// ===================== DATA LAYER =====================
+let DB = {ingredients:[],purchases:[],purchaseBatches:[],products:[],recipes:{},recipeItems:{},productions:[],sales:[],movements:[]};
+let booted = false;
+
+async function loadAll(){
+  const [ing, purBatch, pur, prod, rec, ri, pb, sales, saleItems, movements] = await Promise.all([
+    supabase.from('ingredients').select('*').eq('active',true).order('name'),
+    supabase.from('purchase_batches').select('*').order('purchase_date',{ascending:false}).order('created_at',{ascending:false}),
+    supabase.from('purchases').select('*').order('purchase_date',{ascending:false}).order('created_at',{ascending:false}),
+    supabase.from('products').select('*').eq('active',true).order('name'),
+    supabase.from('recipes').select('*'),
+    supabase.from('recipe_items').select('*'),
+    supabase.from('production_batches').select('*').order('production_date',{ascending:false}),
+    supabase.from('sales').select('*').order('sale_date',{ascending:false}),
+    supabase.from('sale_items').select('*'),
+    supabase.from('inventory_movements').select('*').order('movement_date',{ascending:false}).order('created_at',{ascending:false})
+  ]);
+  const failed = [ing, purBatch, pur, prod, rec, ri, pb, sales, saleItems, movements].find(response=>response.error);
+  if(failed){
+    console.error('Erro ao carregar dados do Supabase:', failed.error);
+    const result = failedResult(failed.error, 'Não foi possível carregar os dados.');
+    toast('Erro: '+result.msg);
+    return result;
+  }
+  DB.ingredients = ing.data || [];
+  DB.purchaseBatches = purBatch.data || [];
+  DB.purchases = pur.data || [];
+  const purchaseItemsByBatch = {};
+  DB.purchases.forEach(item=>{
+    if(!item.purchase_batch_id) return;
+    if(!purchaseItemsByBatch[item.purchase_batch_id]) purchaseItemsByBatch[item.purchase_batch_id] = [];
+    purchaseItemsByBatch[item.purchase_batch_id].push(item);
+  });
+  DB.purchaseBatches = DB.purchaseBatches.map(batch=>({...batch, items:purchaseItemsByBatch[batch.id]||[]}));
+  DB.products = prod.data || [];
+  DB.productions = pb.data || [];
+  DB.movements = movements.data || [];
+
+  DB.recipes = {};
+  DB.recipeItems = {};
+  (rec.data||[]).forEach(r=>{ DB.recipes[r.product_id] = r; });
+  (ri.data||[]).forEach(item=>{
+    if(!DB.recipeItems[item.recipe_id]) DB.recipeItems[item.recipe_id] = [];
+    DB.recipeItems[item.recipe_id].push(item);
+  });
+
+  const itemsBySale = {};
+  (saleItems.data||[]).forEach(it=>{
+    if(!itemsBySale[it.sale_id]) itemsBySale[it.sale_id]=[];
+    itemsBySale[it.sale_id].push(it);
+  });
+  DB.sales = (sales.data||[]).map(s=>({...s, items: itemsBySale[s.id]||[]}));
+  return {ok:true};
+}
+
+function getIngredient(id){ return DB.ingredients.find(i=>i.id===id); }
+function getProduct(id){ return DB.products.find(p=>p.id===id); }
+function getRecipeByProduct(productId){
+  const r = DB.recipes[productId];
+  if(!r) return null;
+  return {...r, items: (DB.recipeItems[r.id]||[])};
+}
+function recipeCostPerUnit(productId){
+  const r = getRecipeByProduct(productId);
+  if(!r || !r.items.length) return 0;
+  let total = 0;
+  for(const it of r.items){
+    const ing = getIngredient(it.ingredient_id);
+    if(!ing) continue;
+    total += convertToBase(it.qty, it.unit) * ing.avg_cost;
+  }
+  return r.yield_qty>0 ? total/r.yield_qty : 0;
+}
+
+async function registerIngredient(name, unit, minStockInput){
+  const cleanName = String(name||'').trim();
+  const family = UNIT_FAMILY[unit];
+  const minStock = Number(minStockInput)||0;
+  if(!cleanName) return failedResult({message:'Informe o nome do ingrediente.'});
+  if(!family) return failedResult({message:'Selecione uma unidade válida.'});
+  if(minStock<0) return failedResult({message:'O estoque mínimo não pode ser negativo.'});
+
+  const {data, error} = await supabase.from('ingredients').insert({
+    name:cleanName, family, unit, stock:0, avg_cost:0,
+    min_stock: convertToBase(minStock, unit)
+  }).select().single();
+  if(error) return failedResult(error, 'Não foi possível cadastrar o ingrediente.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true, data} : loaded;
+}
+
+async function registerPurchase(ingredientId, date, qty, unit, totalCost){
+  const ing = getIngredient(ingredientId);
+  const quantity = Number(qty);
+  const cost = Number(totalCost);
+  if(!ing) return failedResult({message:'Selecione um ingrediente válido.'});
+  if(!date) return failedResult({message:'Informe a data da compra.'});
+  if(!UNIT_FAMILY[unit] || UNIT_FAMILY[unit]!==ing.family) return failedResult({message:'A unidade da compra deve pertencer à mesma família do ingrediente.'});
+  if(!(quantity>0)) return failedResult({message:'Informe uma quantidade maior que zero.'});
+  if(!(cost>=0)) return failedResult({message:'Informe um valor total válido.'});
+
+  const qtyBase = convertToBase(quantity, unit);
+  const costPerBase = cost / qtyBase;
+  const oldStock = Number(ing.stock), oldAvg = Number(ing.avg_cost);
+  const newStock = oldStock + qtyBase;
+  const newAvg = newStock>0 ? ((oldStock*oldAvg)+(qtyBase*costPerBase))/newStock : costPerBase;
+
+  const {error: pErr} = await supabase.from('purchases').insert({
+    ingredient_id: ingredientId, purchase_date: date, qty:quantity, unit, qty_base: qtyBase,
+    total_cost: cost, cost_per_base: costPerBase,
+    avg_cost_before: oldAvg, avg_cost_after: newAvg
+  });
+  if(pErr) return failedResult(pErr, 'Não foi possível registrar a compra.');
+
+  const {error: iErr} = await supabase.from('ingredients').update({
+    stock: newStock, avg_cost: newAvg, updated_at: new Date().toISOString()
+  }).eq('id', ingredientId);
+  if(iErr) return failedResult(iErr, 'A compra foi salva, mas o estoque não pôde ser atualizado.');
+
+  const {error: movementError} = await supabase.from('inventory_movements').insert({
+    item_type:'ingredient', item_id: ingredientId, movement_type:'compra', movement_date:date,
+    qty_before: oldStock, qty_change: qtyBase, qty_after: newStock, note: 'Compra em '+date
+  });
+  if(movementError) return failedResult(movementError, 'A compra e o estoque foram salvos, mas o histórico não pôde ser atualizado.');
+
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
+async function registerPurchaseBatch(purchaseDate, purchaseCategory, supplierName, totalCost, items, note, receiptReference){
+  const cleanSupplier = String(supplierName||'').trim();
+  const total = Number(totalCost);
+  const validItems = Array.isArray(items) ? items.map(item=>({
+    ingredient_id:item.ingredientId,
+    purchase_qty:Number(item.purchaseQty ?? item.qty),
+    purchase_unit:item.purchaseUnit || item.unit,
+    content_qty:Number(item.contentQty ?? 1),
+    content_unit:item.contentUnit || item.unit,
+    qty:Number(item.purchaseQty ?? item.qty) * Number(item.contentQty ?? 1),
+    unit:item.contentUnit || item.unit,
+    total_cost:Math.round(Number(item.totalCost)*100)/100
+  })) : [];
+  if(!purchaseDate) return failedResult({message:'Informe a data da compra.'});
+  if(!cleanSupplier) return failedResult({message:'Informe o mercado, fornecedor ou local da compra.'});
+  if(!(total>=0)) return failedResult({message:'Informe um valor total válido.'});
+  if(!validItems.length) return failedResult({message:'Adicione ao menos um item à compra.'});
+  if(validItems.some(item=>!getIngredient(item.ingredient_id) || !(item.purchase_qty>0) || !(item.content_qty>0) || !(item.qty>0) || !(item.total_cost>=0) || !UNIT_FAMILY[item.unit])){
+    return failedResult({message:'Revise os ingredientes, quantidades, unidades e valores dos itens.'});
+  }
+  const itemSum = Math.round(validItems.reduce((sum,item)=>sum+item.total_cost,0)*100)/100;
+  if(itemSum!==Math.round(total*100)/100){
+    return failedResult({message:'O valor total deve ser igual à soma dos itens. Soma atual: '+fmtBRL(itemSum)+'.'});
+  }
+
+  const {data, error} = await supabase.rpc('register_purchase_batch', {
+    p_purchase_date:purchaseDate,
+    p_purchase_category:purchaseCategory,
+    p_supplier_name:cleanSupplier,
+    p_total_cost:Math.round(total*100)/100,
+    p_items:validItems,
+    p_note:String(note||'').trim() || null,
+    p_receipt_reference:String(receiptReference||'').trim() || null
+  });
+  if(error) return failedResult(error, 'Não foi possível registrar a compra completa.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true, data} : loaded;
+}
+
+async function registerProduct(name, price, minStock){
+  const cleanName = String(name||'').trim();
+  const salePrice = Number(price);
+  const minimum = Number(minStock)||0;
+  if(!cleanName) return failedResult({message:'Informe o nome do produto.'});
+  if(!(salePrice>=0)) return failedResult({message:'Informe um preço de venda válido.'});
+  if(minimum<0) return failedResult({message:'O estoque mínimo não pode ser negativo.'});
+
+  const {data, error} = await supabase.from('products').insert({
+    name:cleanName, price:salePrice, stock:0, min_stock: minimum, last_unit_cost:0
+  }).select().single();
+  if(error) return failedResult(error, 'Não foi possível cadastrar o produto.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true, data} : loaded;
+}
+
+async function updateIngredient(id, name, minStock){
+  const ingredient = getIngredient(id);
+  const cleanName = String(name||'').trim();
+  const minimum = Number(minStock);
+  if(!ingredient || !cleanName) return failedResult({message:'Informe um nome válido para o ingrediente.'});
+  if(!(minimum>=0)) return failedResult({message:'O estoque mínimo deve ser zero ou maior.'});
+  const {error} = await supabase.from('ingredients').update({name:cleanName,min_stock:convertToBase(minimum,ingredient.unit),updated_at:new Date().toISOString()}).eq('id',id);
+  if(error) return failedResult(error,'Não foi possível atualizar o ingrediente.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
+async function updateProduct(id, name, price, minStock){
+  const cleanName = String(name||'').trim();
+  const salePrice = Number(price);
+  const minimum = Number(minStock);
+  if(!getProduct(id) || !cleanName) return failedResult({message:'Informe um nome válido para o produto.'});
+  if(!(salePrice>=0) || !(minimum>=0)) return failedResult({message:'Informe preço e estoque mínimo válidos.'});
+  const {error} = await supabase.from('products').update({name:cleanName,price:salePrice,min_stock:minimum,updated_at:new Date().toISOString()}).eq('id',id);
+  if(error) return failedResult(error,'Não foi possível atualizar o produto.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
+async function saveRecipe(productId, items, yieldQty){
+  const product = getProduct(productId);
+  const rendimento = Number(yieldQty);
+  if(!product) return failedResult({message:'Selecione um produto válido.'});
+  if(!(rendimento>0)) return failedResult({message:'O rendimento deve ser maior que zero.'});
+  if(!Array.isArray(items) || !items.length) return failedResult({message:'Adicione ao menos um ingrediente.'});
+  if(items.some(it=>!getIngredient(it.ingredientId) || !(Number(it.qty)>0) || !UNIT_FAMILY[it.unit])){
+    return failedResult({message:'Revise os ingredientes, quantidades e unidades da ficha.'});
+  }
+
+  let recipe = DB.recipes[productId];
+  if(!recipe){
+    const {data, error} = await supabase.from('recipes').insert({product_id: productId, yield_qty: rendimento}).select().single();
+    if(error) return failedResult(error, 'Não foi possível criar a ficha técnica.');
+    recipe = data;
+  } else {
+    const {error} = await supabase.from('recipes').update({yield_qty: rendimento, updated_at: new Date().toISOString()}).eq('id', recipe.id);
+    if(error) return failedResult(error, 'Não foi possível atualizar a ficha técnica.');
+    const {error: deleteError} = await supabase.from('recipe_items').delete().eq('recipe_id', recipe.id);
+    if(deleteError) return failedResult(deleteError, 'Não foi possível substituir os ingredientes da ficha.');
+  }
+  const rows = items.map(it=>({recipe_id: recipe.id, ingredient_id: it.ingredientId, qty:Number(it.qty), unit:it.unit}));
+  const {error: riErr} = await supabase.from('recipe_items').insert(rows);
+  if(riErr) return failedResult(riErr, 'Não foi possível salvar os ingredientes da ficha.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
+function checkStockForProduction(productId, qtyProduced){
+  const r = getRecipeByProduct(productId);
+  if(!r) return {ok:false, missing:[]};
+  const scale = qtyProduced / r.yield_qty;
+  const missing = [];
+  for(const it of r.items){
+    const ing = getIngredient(it.ingredient_id);
+    const needBase = convertToBase(it.qty, it.unit) * scale;
+    if(!ing || Number(ing.stock) < needBase){
+      missing.push({name: ing?ing.name:'?', need: needBase, have: ing?Number(ing.stock):0, family: ing?ing.family:'peso'});
+    }
+  }
+  return {ok: missing.length===0, missing};
+}
+
+async function registerProduction(productId, date, qtyProduced, qtyLost, force){
+  const r = getRecipeByProduct(productId);
+  const product = getProduct(productId);
+  const produced = Number(qtyProduced);
+  const lost = Number(qtyLost)||0;
+  if(!r || !product) return {ok:false, msg:'Produto sem ficha técnica.'};
+  if(!date || !(produced>0)) return {ok:false, msg:'Informe uma data e uma quantidade produzida maior que zero.'};
+  if(lost<0 || lost>produced) return {ok:false, msg:'A perda deve estar entre zero e a quantidade produzida.'};
+  const check = checkStockForProduction(productId, produced);
+  if(!check.ok && !force) return {ok:false, msg:'Estoque insuficiente de: '+check.missing.map(m=>m.name).join(', '), missing:check.missing};
+
+  const scale = produced / r.yield_qty;
+  let batchCost = 0;
+  const ingredientUpdates = [];
+  for(const it of r.items){
+    const ing = getIngredient(it.ingredient_id);
+    if(!ing) continue;
+    const needBase = convertToBase(it.qty, it.unit) * scale;
+    batchCost += needBase * Number(ing.avg_cost);
+    const before = Number(ing.stock);
+    const after = Math.max(before - needBase, 0);
+    ingredientUpdates.push({id: ing.id, before, after, change: -needBase});
+  }
+  const usable = Math.max(produced - lost, 0);
+  const unitCost = usable>0 ? batchCost/usable : 0;
+
+  const {data: batch, error: bErr} = await supabase.from('production_batches').insert({
+    product_id: productId, production_date: date, qty_planned: produced,
+    qty_produced: produced, qty_lost: lost, usable_qty: usable,
+    batch_cost: batchCost, unit_cost: unitCost, forced: !check.ok
+  }).select().single();
+  if(bErr) return failedResult(bErr, 'Não foi possível registrar a produção.');
+
+  for(const u of ingredientUpdates){
+    const {error: ingredientError} = await supabase.from('ingredients').update({stock: u.after, updated_at: new Date().toISOString()}).eq('id', u.id);
+    if(ingredientError) return failedResult(ingredientError, 'A produção foi salva, mas um ingrediente não pôde ser atualizado.');
+    const {error: movementError} = await supabase.from('inventory_movements').insert({
+      item_type:'ingredient', item_id: u.id, movement_type:'producao_saida', movement_date:date,
+      qty_before: u.before, qty_change: u.change, qty_after: u.after, origin_id: batch.id
+    });
+    if(movementError) return failedResult(movementError, 'A produção foi salva, mas o histórico do estoque não pôde ser atualizado.');
+  }
+
+  const prodBefore = Number(product.stock);
+  const prodAfter = prodBefore + usable;
+  const {error: productError} = await supabase.from('products').update({stock: prodAfter, last_unit_cost: unitCost, updated_at: new Date().toISOString()}).eq('id', productId);
+  if(productError) return failedResult(productError, 'A produção foi salva, mas o estoque do produto não pôde ser atualizado.');
+  const {error: productMovementError} = await supabase.from('inventory_movements').insert({
+    item_type:'product', item_id: productId, movement_type:'producao_entrada', movement_date:date,
+    qty_before: prodBefore, qty_change: usable, qty_after: prodAfter, origin_id: batch.id
+  });
+  if(productMovementError) return failedResult(productMovementError, 'A produção foi salva, mas o histórico do produto não pôde ser atualizado.');
+
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
+async function registerSale(lines, date, discount){
+  const saleLines = Array.isArray(lines) ? lines : [];
+  const saleDiscount = Number(discount)||0;
+  if(!saleLines.length) return {ok:false, msg:'Adicione ao menos um item.'};
+  if(!date) return {ok:false, msg:'Informe a data da venda.'};
+  if(saleDiscount<0) return {ok:false, msg:'O desconto não pode ser negativo.'};
+
+  const quantities = {};
+  for(const l of saleLines){
+    const p = getProduct(l.productId);
+    const quantity = Number(l.qty);
+    if(!p || !(quantity>0)) return {ok:false, msg:'Selecione produtos e quantidades válidas.'};
+    quantities[l.productId] = (quantities[l.productId]||0) + quantity;
+    if(Number(p.stock) < quantities[l.productId]) return {ok:false, msg:'Estoque insuficiente para '+p.name};
+  }
+  let grossTotal=0, cost=0;
+  const itemsToInsert = [];
+  for(const l of saleLines){
+    const p = getProduct(l.productId);
+    const unitPrice = Number(l.unitPrice);
+    if(!(unitPrice>=0)) return {ok:false, msg:'Informe preços válidos para os produtos.'};
+    const subtotal = Number(l.qty)*unitPrice;
+    const costLine = Number(l.qty)*Number(p.last_unit_cost);
+    grossTotal += subtotal; cost += costLine;
+    itemsToInsert.push({productId:l.productId, qty:Number(l.qty), unitPrice, costUnit:Number(p.last_unit_cost), subtotal, costLine});
+  }
+  if(saleDiscount>grossTotal) return {ok:false, msg:'O desconto não pode ser maior que o total da venda.'};
+  const total = grossTotal - saleDiscount;
+
+  const {data: sale, error: sErr} = await supabase.from('sales').insert({
+    sale_date: date, discount: saleDiscount, total, cost, profit: total-cost
+  }).select().single();
+  if(sErr) return failedResult(sErr, 'Não foi possível registrar a venda.');
+
+  const rows = itemsToInsert.map(it=>({
+    sale_id: sale.id, product_id: it.productId, qty: it.qty, unit_price: it.unitPrice,
+    cost_unit: it.costUnit, subtotal: it.subtotal, cost_line: it.costLine
+  }));
+  const {error: saleItemsError} = await supabase.from('sale_items').insert(rows);
+  if(saleItemsError) return failedResult(saleItemsError, 'A venda foi criada, mas seus itens não puderam ser salvos.');
+
+  for(const it of itemsToInsert){
+    const p = getProduct(it.productId);
+    const before = Number(p.stock);
+    const after = before - it.qty;
+    const {error: productError} = await supabase.from('products').update({stock: after, updated_at: new Date().toISOString()}).eq('id', it.productId);
+    if(productError) return failedResult(productError, 'A venda foi salva, mas o estoque do produto não pôde ser atualizado.');
+    const {error: movementError} = await supabase.from('inventory_movements').insert({
+      item_type:'product', item_id: it.productId, movement_type:'venda', movement_date:date,
+      qty_before: before, qty_change: -it.qty, qty_after: after, origin_id: sale.id
+    });
+    if(movementError) return failedResult(movementError, 'A venda foi salva, mas o histórico do estoque não pôde ser atualizado.');
+  }
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
+async function cancelSale(saleId){
+  const sale = DB.sales.find(s=>s.id===saleId);
+  if(!sale) return failedResult({message:'Venda não encontrada.'});
+  if(sale.cancelled) return failedResult({message:'Esta venda já está cancelada.'});
+  for(const it of sale.items){
+    const p = getProduct(it.product_id);
+    if(!p) continue;
+    const before = Number(p.stock);
+    const after = before + Number(it.qty);
+    const {error: productError} = await supabase.from('products').update({stock: after, updated_at: new Date().toISOString()}).eq('id', it.product_id);
+    if(productError) return failedResult(productError, 'O estoque não pôde ser revertido.');
+    const {error: movementError} = await supabase.from('inventory_movements').insert({
+      item_type:'product', item_id: it.product_id, movement_type:'cancelamento', movement_date:todayISO(),
+      qty_before: before, qty_change: Number(it.qty), qty_after: after, origin_id: saleId
+    });
+    if(movementError) return failedResult(movementError, 'O estoque foi revertido, mas o histórico não pôde ser atualizado.');
+  }
+  const {error: saleError} = await supabase.from('sales').update({cancelled:true, cancelled_at: new Date().toISOString()}).eq('id', saleId);
+  if(saleError) return failedResult(saleError, 'A venda não pôde ser cancelada.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
+// ===================== METRICS =====================
+function metrics(){
+  const validSales = DB.sales.filter(s=>!s.cancelled);
+  const today = todayISO();
+  const todaySales = validSales.filter(s=>s.sale_date===today);
+  const monthPrefix = today.slice(0,7);
+  const monthSales = validSales.filter(s=>s.sale_date.startsWith(monthPrefix));
+  const sum = (arr,f)=>arr.reduce((a,s)=>a+f(s),0);
+  const stockValue = DB.ingredients.reduce((a,i)=>a+Number(i.stock)*Number(i.avg_cost),0) + DB.products.reduce((a,p)=>a+Number(p.stock)*Number(p.last_unit_cost),0);
+  const monthPurchaseBatches = (DB.purchaseBatches||[]).filter(p=>p.purchase_date.startsWith(monthPrefix));
+  const legacyMonthPurchases = DB.purchases.filter(p=>!p.purchase_batch_id && p.purchase_date.startsWith(monthPrefix));
+  const purchasesMonth = sum(monthPurchaseBatches,p=>Number(p.total_cost)) + sum(legacyMonthPurchases,p=>Number(p.total_cost));
+  const purchaseCountMonth = monthPurchaseBatches.length + legacyMonthPurchases.length;
+  const fatMes = sum(monthSales,s=>Number(s.total));
+  const lucroMes = sum(monthSales,s=>Number(s.profit));
+  return {
+    faturamentoHoje: sum(todaySales,s=>Number(s.total)),
+    faturamentoMes: fatMes,
+    lucroHoje: sum(todaySales,s=>Number(s.profit)),
+    lucroMes,
+    vendasHoje: todaySales.length,
+    unidadesHoje: sum(todaySales,s=>s.items.reduce((a,i)=>a+Number(i.qty),0)),
+    ticketMedio: monthSales.length ? fatMes/monthSales.length : 0,
+    cmvMes: sum(monthSales,s=>Number(s.cost)),
+    margemMes: fatMes>0 ? lucroMes/fatMes*100 : 0,
+    comprasMes: purchasesMonth,
+    comprasQtdMes: purchaseCountMonth,
+    stockValue
+  };
+}
+
+// ===================== RENDER =====================
+let activeTab = 'dashboard';
+function render(){
+  document.getElementById('subtitle').textContent = new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});
+  document.getElementById('main').innerHTML = renderTab(activeTab);
+  attachHandlers();
+}
+function renderTab(tab){
+  if(tab==='dashboard') return renderDashboard();
+  if(tab==='ingredientes') return renderIngredientes();
+  if(tab==='compras') return renderCompras();
+  if(tab==='relatorios') return renderRelatorios();
+  if(tab==='produtos') return renderProdutos();
+  if(tab==='fichas') return renderFichas();
+  if(tab==='producao') return renderProducao();
+  if(tab==='estoque') return renderEstoque();
+  if(tab==='vendas') return renderVendas();
+  return '';
+}
+
+function renderDashboard(){
+  const m = metrics();
+  return `
+  <div class="card report-access-card"><div><h2>Relatórios</h2><div class="muted">Gere relatórios financeiros e operacionais por período.</div></div><button class="primary report-access-button" type="button" id="openReports">Abrir relatórios</button></div>
+  <div class="grid">
+    <div class="kpi"><div class="label">Faturamento hoje</div><div class="value">${fmtBRL(m.faturamentoHoje)}</div></div>
+    <div class="kpi"><div class="label">Faturamento mês</div><div class="value">${fmtBRL(m.faturamentoMes)}</div></div>
+    <div class="kpi"><div class="label">Lucro bruto hoje</div><div class="value ${m.lucroHoje>=0?'good':'bad'}">${fmtBRL(m.lucroHoje)}</div></div>
+    <div class="kpi"><div class="label">Lucro bruto mês</div><div class="value ${m.lucroMes>=0?'good':'bad'}">${fmtBRL(m.lucroMes)}</div></div>
+    <div class="kpi"><div class="label">Vendas hoje</div><div class="value">${m.vendasHoje}</div></div>
+    <div class="kpi"><div class="label">Unidades vendidas hoje</div><div class="value">${m.unidadesHoje}</div></div>
+    <div class="kpi"><div class="label">Ticket médio (mês)</div><div class="value">${fmtBRL(m.ticketMedio)}</div></div>
+    <div class="kpi"><div class="label">Margem bruta (mês)</div><div class="value">${m.margemMes.toFixed(1)}%</div></div>
+    <div class="kpi"><div class="label">CMV (mês)</div><div class="value">${fmtBRL(m.cmvMes)}</div></div>
+    <div class="kpi"><div class="label">Compras do mês</div><div class="value">${fmtBRL(m.comprasMes)}</div></div>
+    <div class="kpi"><div class="label">Idas ao mercado/fornecedor</div><div class="value">${m.comprasQtdMes}</div></div>
+    <div class="kpi"><div class="label">Valor em estoque</div><div class="value">${fmtBRL(m.stockValue)}</div></div>
+  </div>
+  <div class="card"><h2>Visão rápida do caixa</h2><div class="summary-note">No mês atual, foram registradas <b>${m.comprasQtdMes}</b> compras, totalizando <b>${fmtBRL(m.comprasMes)}</b> em desembolsos. O faturamento foi <b>${fmtBRL(m.faturamentoMes)}</b> e o lucro bruto calculado foi <b>${fmtBRL(m.lucroMes)}</b>.</div></div>
+  <div class="card"><h2>⚠️ Alertas de estoque baixo</h2>${renderLowStockAlerts()}</div>
+  <div class="card"><h2>Últimas vendas</h2>${renderRecentSalesTable(5)}</div>`;
+}
+function renderLowStockAlerts(){
+  const lowIng = DB.ingredients.filter(i=>Number(i.min_stock)>0 && Number(i.stock)<Number(i.min_stock));
+  const lowProd = DB.products.filter(p=>Number(p.min_stock)>0 && Number(p.stock)<Number(p.min_stock));
+  if(!lowIng.length && !lowProd.length) return '<div class="empty">Nenhum alerta no momento.</div>';
+  let html='';
+  lowIng.forEach(i=>html+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">🧂 <b>${i.name}</b> — ${displayQty(Number(i.stock),i.family)} <span class="muted">(mín: ${displayQty(Number(i.min_stock),i.family)})</span></div>`);
+  lowProd.forEach(p=>html+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">🥧 <b>${p.name}</b> — ${p.stock} un <span class="muted">(mín: ${p.min_stock} un)</span></div>`);
+  return html;
+}
+function renderRecentSalesTable(limit, source=DB.sales){
+  const sales = [...source].filter(s=>!s.cancelled).slice(0,limit||100);
+  if(!sales.length) return '<div class="empty">Nenhuma venda registrada ainda.</div>';
+  const rows = sales.map(s=>`<tr>
+    <td>${fmtDate(s.sale_date)}</td>
+    <td>${s.items.map(i=>(getProduct(i.product_id)?.name||'?')+' x'+i.qty).join(', ')}</td>
+    <td>${fmtBRL(s.total)}</td>
+    <td style="color:${Number(s.profit)>=0?'var(--good)':'var(--bad)'}">${fmtBRL(s.profit)}</td>
+  </tr>`).join('');
+  return `<table><tr><th>Data</th><th>Itens</th><th>Total</th><th>Lucro</th></tr>${rows}</table>`;
+}
+
+function renderIngredientes(){
+  const totalValue = DB.ingredients.reduce((sum,i)=>sum+Number(i.stock)*Number(i.avg_cost),0);
+  const rows = DB.ingredients.map(i=>`<tr>
+    <td><input class="sheet-input ing-name" data-id="${i.id}" value="${i.name.replace(/"/g,'&quot;')}"></td><td>${displayQty(Number(i.stock),i.family)}</td>
+    <td>${displayCostPerBase(Number(i.avg_cost),i.family)}</td>
+    <td><input class="sheet-input ing-min" data-id="${i.id}" type="number" min="0" step="any" value="${Number(i.min_stock)/TO_BASE[i.unit]}"></td>
+    <td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td><td class="sheet-actions"><button class="secondary save-ingredient" data-id="${i.id}" type="button">Salvar</button></td>
+  </tr>`).join('');
+  return `
+  <div class="card"><h2>Novo ingrediente</h2>
+    <form id="form-ingrediente">
+      <label>Nome</label><input name="name" required placeholder="Ex: Farinha de trigo">
+      <label>Unidade de medida</label>
+      <select name="unit" required>
+        <option value="kg">Quilo (kg)</option><option value="g">Grama (g)</option>
+        <option value="l">Litro (L)</option><option value="ml">Mililitro (ml)</option>
+        <option value="un">Unidade (un)</option>
+      </select>
+      <label>Estoque mínimo (nessa unidade, opcional)</label>
+      <input name="minStock" type="number" step="any" placeholder="Ex: 2">
+      <button class="primary" type="submit">Cadastrar ingrediente</button>
+    </form>
+  </div>
+  <div class="card"><h2>Ingredientes cadastrados</h2>
+    ${DB.ingredients.length ? `<div class="summary-note">Valor total dos ingredientes em estoque: <b>${fmtBRL(totalValue)}</b></div><div class="report-table-wrap"><table><tr><th>Nome</th><th>Quantidade</th><th>Custo médio</th><th>Estoque mínimo</th><th>Valor total</th><th></th></tr>${rows}<tr class="sheet-total"><td colspan="4">Total em estoque</td><td>${fmtBRL(totalValue)}</td><td></td></tr></table></div>` : '<div class="empty">Nenhum ingrediente cadastrado.</div>'}
+  </div>`;
+}
+
+let purchaseDraftItems = [];
+function renderPurchaseItemRow(idx, item){
+  const ing = item?.ingredientId ? getIngredient(item.ingredientId) : null;
+  const listId = `purchase-items-options-${idx}`;
+  const ingOptions = DB.ingredients.map(i=>`<option value="${i.name.replace(/"/g,'&quot;')}"></option>`).join('');
+  const selectedUnit = item?.contentUnit || item?.unit || ing?.unit || 'un';
+  const purchaseQty = item?.purchaseQty ?? item?.qty ?? '';
+  const contentQty = item?.contentQty ?? 1;
+  const purchaseUnit = item?.purchaseUnit || 'pacote';
+  const unitCost = Number(item?.totalCost)>0 && Number(purchaseQty)>0 ? Number(item.totalCost)/Number(purchaseQty) : 0;
+  return `<div class="purchase-item" data-idx="${idx}" data-ingredient-id="${item?.ingredientId||ing?.id||''}">
+    <div><label>Item / insumo</label><input class="pi-ingredient-name" list="${listId}" autocomplete="off" placeholder="Comece a digitar..." value="${(item?.itemName || ing?.name || '').replace(/"/g,'&quot;')}" required><datalist id="${listId}">${ingOptions}</datalist></div>
+    <div><label>Qtd. de embalagens</label><input class="pi-purchase-qty" type="number" min="0" step="any" placeholder="Ex: 5" value="${purchaseQty}" required></div>
+    <div><label>Embalagem</label><select class="pi-purchase-unit"><option ${purchaseUnit==='pacote'?'selected':''}>pacote</option><option ${purchaseUnit==='caixa'?'selected':''}>caixa</option><option ${purchaseUnit==='saco'?'selected':''}>saco</option><option ${purchaseUnit==='fardo'?'selected':''}>fardo</option><option ${purchaseUnit==='bandeja'?'selected':''}>bandeja</option></select></div>
+    <div><label>Conteúdo por embalagem</label><input class="pi-content-qty" type="number" min="0" step="any" value="${contentQty}" required></div>
+    <div><label>Unidade do conteúdo</label><select class="pi-content-unit" required>
+      <option value="kg" ${selectedUnit==='kg'?'selected':''}>kg</option><option value="g" ${selectedUnit==='g'?'selected':''}>g</option><option value="l" ${selectedUnit==='l'?'selected':''}>L</option><option value="ml" ${selectedUnit==='ml'?'selected':''}>ml</option><option value="un" ${selectedUnit==='un'?'selected':''}>un</option>
+    </select></div>
+    <div><label>Valor total do item (R$)</label><input class="pi-total" type="number" min="0" step="0.01" placeholder="0,00" value="${item?.totalCost??''}" required><small class="pi-unit-cost muted">${unitCost ? fmtBRL(unitCost)+' por embalagem' : ''}</small></div>
+    <button type="button" class="danger pi-remove" aria-label="Remover item">✕</button>
+  </div>`;
+}
+function refreshPurchaseItemsList(){
+  const container = document.getElementById('purchaseItemsList');
+  if(!container) return;
+  syncPurchaseDraftFromDom();
+  container.innerHTML = purchaseDraftItems.map((item,idx)=>renderPurchaseItemRow(idx,item)).join('');
+  container.querySelectorAll('.pi-remove').forEach(btn=>{
+    btn.onclick = e=>{
+      purchaseDraftItems.splice(Number(e.currentTarget.closest('.purchase-item').dataset.idx),1);
+      refreshPurchaseItemsList();
+      updatePurchaseItemsSum();
+    };
+  });
+  container.querySelectorAll('.pi-ingredient-name').forEach(input=>{
+    input.addEventListener('input', e=>{
+      const row = e.currentTarget.closest('.purchase-item');
+      const typed = e.currentTarget.value.trim().toLowerCase();
+      const ing = DB.ingredients.find(item=>item.name.trim().toLowerCase()===typed);
+      row.dataset.ingredientId = ing?.id || '';
+      if(ing) row.querySelector('.pi-content-unit').value = ing.unit;
+    });
+  });
+  container.querySelectorAll('.pi-total,.pi-purchase-qty,.pi-content-qty').forEach(input=>input.addEventListener('input', ()=>{
+    const row=input.closest('.purchase-item');
+    const qty=Number(row.querySelector('.pi-purchase-qty').value)||0;
+    const total=Number(row.querySelector('.pi-total').value)||0;
+    row.querySelector('.pi-unit-cost').textContent=qty&&total ? fmtBRL(total/qty)+' por embalagem' : '';
+    updatePurchaseItemsSum();
+  }));
+  updatePurchaseItemsSum();
+}
+function syncPurchaseDraftFromDom(){
+  const rows = [...document.querySelectorAll('#purchaseItemsList .purchase-item')];
+  if(!rows.length) return;
+  purchaseDraftItems = rows.map(row=>({
+    ingredientId:row.dataset.ingredientId || DB.ingredients.find(item=>item.name.trim().toLowerCase()===row.querySelector('.pi-ingredient-name')?.value.trim().toLowerCase())?.id,
+    itemName:row.querySelector('.pi-ingredient-name')?.value || '',
+    purchaseQty:row.querySelector('.pi-purchase-qty')?.value || '',
+    purchaseUnit:row.querySelector('.pi-purchase-unit')?.value || 'pacote',
+    contentQty:row.querySelector('.pi-content-qty')?.value || 1,
+    contentUnit:row.querySelector('.pi-content-unit')?.value || 'un',
+    totalCost:row.querySelector('.pi-total')?.value || ''
+  }));
+}
+function updatePurchaseItemsSum(){
+  const sum = [...document.querySelectorAll('#purchaseItemsList .pi-total')].reduce((total,input)=>total+(Number(input.value)||0),0);
+  const el = document.getElementById('purchaseItemsSum');
+  if(el) el.textContent = 'Soma dos itens: '+fmtBRL(sum);
+}
+function addPurchaseDraftItem(event){
+  event?.preventDefault();
+  syncPurchaseDraftFromDom();
+  const newItem = {ingredientId:'',purchaseQty:'',purchaseUnit:'pacote',contentQty:1,contentUnit:'un',totalCost:'',itemName:''};
+  const newIndex = purchaseDraftItems.length;
+  purchaseDraftItems.push(newItem);
+  const container = document.getElementById('purchaseItemsList');
+  if(!container) return;
+  container.insertAdjacentHTML('beforeend', renderPurchaseItemRow(newIndex, newItem));
+  const row = container.lastElementChild;
+  row.querySelector('.pi-remove').onclick = e=>{
+    purchaseDraftItems.splice(Number(e.currentTarget.closest('.purchase-item').dataset.idx),1);
+    refreshPurchaseItemsList();
+  };
+  row.querySelector('.pi-ingredient-name').addEventListener('input', e=>{
+    const typed = e.currentTarget.value.trim().toLowerCase();
+    const ing = DB.ingredients.find(item=>item.name.trim().toLowerCase()===typed);
+    row.dataset.ingredientId = ing?.id || '';
+    if(ing) row.querySelector('.pi-content-unit').value = ing.unit;
+  });
+  row.querySelectorAll('.pi-total,.pi-purchase-qty,.pi-content-qty').forEach(input=>input.addEventListener('input', ()=>{
+    const qty=Number(row.querySelector('.pi-purchase-qty').value)||0;
+    const total=Number(row.querySelector('.pi-total').value)||0;
+    row.querySelector('.pi-unit-cost').textContent=qty&&total ? fmtBRL(total/qty)+' por embalagem' : '';
+    updatePurchaseItemsSum();
+  }));
+  updatePurchaseItemsSum();
+  const input = row.querySelector('.pi-ingredient-name');
+  if(input) setTimeout(()=>input.focus(), 0);
+}
+window.__addPurchaseDraftItem = addPurchaseDraftItem;
+function renderPurchaseBatch(batch){
+  const categoryLabels = {mercado:'Mercado', casa_embalagens:'Casa de embalagens', outro:'Outro'};
+  const itemRows = (batch.items||[]).map(item=>{
+    const ing = getIngredient(item.ingredient_id);
+    const purchaseQty = item.purchase_qty ?? item.qty;
+    const purchaseUnit = item.purchase_unit || item.unit;
+    const contentQty = item.content_qty ?? 1;
+    const contentUnit = item.content_unit || item.unit;
+    const stockQty = item.qty+' '+item.unit;
+    const unitCost = Number(purchaseQty)>0 ? Number(item.total_cost)/Number(purchaseQty) : 0;
+    const baseCost = Number(item.qty_base)>0 ? Number(item.total_cost)/Number(item.qty_base) : 0;
+    return `<tr><td>${ing?ing.name:'Ingrediente removido'}</td><td>${purchaseQty} ${purchaseUnit} × ${contentQty} ${contentUnit}</td><td>${stockQty}</td><td>${fmtBRL(unitCost)} / embalagem</td><td>${fmtBRL(baseCost)} / unidade-base</td><td>${fmtBRL(item.total_cost)}</td></tr>`;
+  }).join('');
+  return `<div class="purchase-entry">
+    <div class="purchase-entry-head"><div><div class="purchase-entry-title">${fmtDate(batch.purchase_date)} · ${batch.supplier_name}</div><div class="muted">${categoryLabels[batch.purchase_category]||'Compra'}${batch.receipt_reference?' · Nota: '+batch.receipt_reference:''}</div></div><div class="purchase-entry-total">${fmtBRL(batch.total_cost)}</div></div>
+    ${batch.note?`<div class="muted" style="margin-top:6px;">${batch.note}</div>`:''}
+    ${itemRows?`<div class="report-table-wrap"><table><tr><th>Item</th><th>Compra</th><th>Vai para estoque</th><th>Custo/embalagem</th><th>Custo/un. base</th><th>Total</th></tr>${itemRows}</table></div>`:'<div class="empty">Nenhum item detalhado.</div>'}
+  </div>`;
+}
+function renderCompras(){
+  const batches = DB.purchaseBatches||[];
+  return `
+  <div class="card"><h2>Nova compra / entrada de caixa</h2>
+    <div class="summary-note">Informe a compra como veio na nota. Exemplo: <b>3 pacotes</b>, com <b>1 kg por pacote</b>, valor total <b>R$ 90,00</b>. O sistema converte automaticamente para <b>3 kg no estoque</b>, calcula o custo por kg e usa esse valor para calcular qualquer quantidade da receita, como 200 g.</div>
+    <form id="form-compra" style="margin-top:12px;">
+      <div class="row">
+        <div><label>Data da compra</label><input name="date" type="date" value="${todayISO()}" required></div>
+        <div><label>Tipo de compra</label><select name="category" required><option value="mercado">Mercado</option><option value="casa_embalagens">Casa de embalagens</option><option value="outro">Outro</option></select></div>
+      </div>
+      <label>Mercado / fornecedor / local</label><input name="supplierName" required placeholder="Ex: Atacadão, Casa das Embalagens">
+      <label>Itens da compra</label>
+      <div id="purchaseItemsList"></div>
+      <button class="secondary" id="addPurchaseItem" type="button" data-action="add-purchase-item" onclick="window.__addPurchaseDraftItem(event)">+ Adicionar item</button>
+      <button class="secondary" id="addIngredientFromPurchase" type="button">+ Cadastrar item</button>
+      <div class="row" style="margin-top:8px;">
+        <div><label>Valor total da compra (R$)</label><input id="purchaseTotal" name="totalCost" type="number" min="0" step="0.01" placeholder="300,00" required></div>
+        <div id="purchaseItemsSum" class="summary-note" style="align-self:end;">Soma dos itens: R$ 0,00</div>
+      </div>
+      <label>Observação (opcional)</label><input name="note" placeholder="Ex: compra para produção da semana">
+      <label>Número da nota ou referência do comprovante (opcional)</label><input name="receiptReference" placeholder="Ex: NF 12345 ou link do arquivo">
+      <button class="primary" type="submit">Registrar compra completa</button>
+    </form>
+  </div>
+  <div class="card"><h2>Histórico de compras</h2>
+    ${batches.length ? batches.map(renderPurchaseBatch).join('') : '<div class="empty">Nenhuma compra composta registrada.</div>'}
+    ${DB.purchases.some(p=>!p.purchase_batch_id)?'<div class="summary-note" style="margin-top:10px;">Existem lançamentos antigos cadastrados antes do modelo de compras compostas. Eles continuam no banco e serão considerados nos relatórios pelo valor individual.</div>':''}
+  </div>`;
+}
+
+function renderProdutos(){
+  const totalValue = DB.products.reduce((sum,p)=>sum+Number(p.stock)*Number(p.last_unit_cost),0);
+  const rows = DB.products.map(p=>{
+    const cost = Number(p.last_unit_cost) || recipeCostPerUnit(p.id);
+    const margin = p.price>0 ? ((p.price-cost)/p.price*100) : 0;
+    return `<tr><td><input class="sheet-input prod-name" data-id="${p.id}" value="${p.name.replace(/"/g,'&quot;')}"></td><td><input class="sheet-input prod-price" data-id="${p.id}" type="number" min="0" step="0.01" value="${Number(p.price)}"></td><td>${fmtBRL(cost)}</td>
+      <td style="color:${margin>=0?'var(--good)':'var(--bad)'}">${margin.toFixed(0)}%</td><td>${p.stock} un</td><td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td><td class="sheet-actions"><button class="secondary save-product" data-id="${p.id}" type="button">Salvar</button></td></tr>`;
+  }).join('');
+  return `
+  <div class="card"><h2>Novo produto</h2>
+    <form id="form-produto">
+      <label>Nome</label><input name="name" required placeholder="Ex: Empadão de Frango 1kg">
+      <label>Preço de venda (R$)</label><input name="price" type="number" step="any" required>
+      <label>Estoque mínimo (un, opcional)</label><input name="minStock" type="number" step="any">
+      <button class="primary" type="submit">Cadastrar produto</button>
+    </form>
+  </div>
+  <div class="card"><h2>Produtos cadastrados</h2>
+    ${DB.products.length ? `<div class="summary-note">Valor total dos produtos acabados em estoque: <b>${fmtBRL(totalValue)}</b></div><div class="report-table-wrap"><table><tr><th>Nome</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Quantidade</th><th>Valor total</th><th></th></tr>${rows}<tr class="sheet-total"><td colspan="5">Total em estoque</td><td>${fmtBRL(totalValue)}</td><td></td></tr></table></div>` : '<div class="empty">Nenhum produto cadastrado.</div>'}
+  </div>`;
+}
+
+let recipeDraftItems = [];
+function renderFichas(){
+  if(!DB.products.length) return '<div class="card"><div class="empty">Cadastre um produto primeiro.</div></div>';
+  if(!DB.ingredients.length) return '<div class="card"><div class="empty">Cadastre ingredientes primeiro.</div></div>';
+  const prodOptions = DB.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  return `
+  <div class="card"><h2>Montar ficha técnica</h2>
+    <label>Produto</label><select id="fichaProduct">${prodOptions}</select>
+    <label>Rendimento (quantas unidades essa receita produz)</label>
+    <input id="fichaYield" type="number" step="any" value="1">
+    <div id="recipeItemsList" style="margin-top:10px;"></div>
+    <button class="secondary" id="addRecipeItem" type="button">+ Adicionar ingrediente</button>
+    <button class="primary" id="saveRecipeBtn" type="button" style="margin-top:10px;">Salvar ficha técnica</button>
+  </div>
+  <div class="card"><h2>Fichas técnicas cadastradas</h2>${renderRecipesList()}</div>`;
+}
+function renderRecipesList(){
+  const productIds = Object.keys(DB.recipes);
+  if(!productIds.length) return '<div class="empty">Nenhuma ficha técnica cadastrada.</div>';
+  return productIds.map(pid=>{
+    const p = getProduct(pid);
+    const r = getRecipeByProduct(pid);
+    if(!p || !r) return '';
+    const items = r.items.map(it=>{
+      const ing = getIngredient(it.ingredient_id);
+      return `<li>${ing?ing.name:'?'}: ${it.qty} ${it.unit}</li>`;
+    }).join('');
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+      <b>${p.name}</b> <span class="muted">(rende ${r.yield_qty} un)</span>
+      <ul style="margin:6px 0;padding-left:18px;font-size:13px;">${items}</ul>
+      <div class="muted">Custo por unidade: ${fmtBRL(recipeCostPerUnit(pid))}</div>
+    </div>`;
+  }).join('');
+}
+function renderRecipeItemRow(idx, item){
+  const ingOptions = DB.ingredients.map(i=>`<option value="${i.id}" ${item&&item.ingredientId===i.id?'selected':''}>${i.name}</option>`).join('');
+  return `<div class="recipe-item" data-idx="${idx}">
+    <select class="ri-ingredient">${ingOptions}</select>
+    <input class="ri-qty" type="number" step="any" placeholder="Qtd" value="${item?item.qty:''}">
+    <select class="ri-unit">
+      <option value="kg">kg</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option><option value="un">un</option>
+    </select>
+    <button type="button" class="danger ri-remove">✕</button>
+  </div>`;
+}
+function refreshRecipeItemsList(){
+  const container = document.getElementById('recipeItemsList');
+  if(!container) return;
+  container.innerHTML = recipeDraftItems.map((it,idx)=>renderRecipeItemRow(idx,it)).join('');
+  container.querySelectorAll('.ri-unit').forEach((sel,idx)=>{ if(recipeDraftItems[idx]) sel.value = recipeDraftItems[idx].unit || 'kg'; });
+  container.querySelectorAll('.ri-remove').forEach(btn=>{
+    btn.onclick = (e)=>{ recipeDraftItems.splice(+e.target.closest('.recipe-item').dataset.idx,1); refreshRecipeItemsList(); };
+  });
+}
+
+function renderProducao(){
+  const validProducts = DB.products.filter(p=>DB.recipes[p.id]);
+  if(!validProducts.length) return '<div class="card"><div class="empty">Cadastre uma ficha técnica primeiro.</div></div>';
+  const prodOptions = validProducts.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const rows = DB.productions.map(pr=>{
+    const p = getProduct(pr.product_id);
+    return `<tr><td>${fmtDate(pr.production_date)}</td><td>${p?p.name:'—'}</td><td>${pr.usable_qty} un</td><td>${fmtBRL(pr.unit_cost)}</td><td>${fmtBRL(pr.batch_cost)}</td></tr>`;
+  }).join('');
+  return `
+  <div class="card"><h2>Nova produção</h2>
+    <form id="form-producao">
+      <label>Produto</label><select name="productId" id="producaoProduct" required>${prodOptions}</select>
+      <label>Data</label><input name="date" type="date" value="${todayISO()}" required>
+      <div class="row">
+        <div><label>Quantidade produzida</label><input name="qtyProduced" type="number" step="any" required></div>
+        <div><label>Quantidade perdida</label><input name="qtyLost" type="number" step="any" value="0"></div>
+      </div>
+      <div id="producaoStockCheck" class="muted" style="margin:6px 0;"></div>
+      <button class="primary" type="submit">Confirmar produção</button>
+    </form>
+  </div>
+  <div class="card"><h2>Histórico de produção</h2>
+    ${DB.productions.length ? `<table><tr><th>Data</th><th>Produto</th><th>Unid.</th><th>Custo/un</th><th>Custo lote</th></tr>${rows}</table>` : '<div class="empty">Nenhuma produção registrada.</div>'}
+  </div>`;
+}
+
+function renderEstoque(){
+  const ingredientsTotal = DB.ingredients.reduce((total,i)=>total+Number(i.stock)*Number(i.avg_cost),0);
+  const productsTotal = DB.products.reduce((total,p)=>total+Number(p.stock)*Number(p.last_unit_cost),0);
+  const ingRows = DB.ingredients.map(i=>`<tr><td>${i.name}</td><td>${displayQty(Number(i.stock),i.family)}</td>
+    <td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td>
+    <td>${Number(i.min_stock)>0 && Number(i.stock)<Number(i.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td></tr>`).join('');
+  const prodRows = DB.products.map(p=>`<tr><td>${p.name}</td><td>${p.stock} un</td>
+    <td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td>
+    <td>${Number(p.min_stock)>0 && Number(p.stock)<Number(p.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td></tr>`).join('');
+  return `
+  <div class="card"><h2>Estoque de ingredientes</h2>
+    ${DB.ingredients.length ? `<div class="summary-note">Quantidade de ingredientes: <b>${DB.ingredients.length}</b> · Valor total: <b>${fmtBRL(ingredientsTotal)}</b></div><div class="report-table-wrap"><table><tr><th>Item</th><th>Quantidade</th><th>Valor total</th><th>Status</th></tr>${ingRows}<tr class="sheet-total"><td colspan="2">Total ingredientes</td><td>${fmtBRL(ingredientsTotal)}</td><td></td></tr></table></div>` : '<div class="empty">Sem ingredientes.</div>'}
+  </div>
+  <div class="card"><h2>Estoque de produtos acabados</h2>
+    ${DB.products.length ? `<div class="summary-note">Quantidade de produtos: <b>${DB.products.length}</b> · Valor total: <b>${fmtBRL(productsTotal)}</b></div><div class="report-table-wrap"><table><tr><th>Item</th><th>Quantidade</th><th>Valor total</th><th>Status</th></tr>${prodRows}<tr class="sheet-total"><td colspan="2">Total produtos</td><td>${fmtBRL(productsTotal)}</td><td></td></tr></table></div>` : '<div class="empty">Sem produtos.</div>'}
+  <div class="card"><h2>Valor total do estoque</h2><div class="kpi"><div class="label">Ingredientes + produtos acabados</div><div class="value">${fmtBRL(ingredientsTotal+productsTotal)}</div></div></div>
+  </div>`;
+}
+
+function addDaysISO(iso, amount){
+  const date = new Date(iso+'T12:00:00');
+  date.setDate(date.getDate()+amount);
+  return date.toISOString().slice(0,10);
+}
+function periodLabel(start, end){
+  if(start===end) return fmtDate(start);
+  return fmtDate(start)+' a '+fmtDate(end);
+}
+let reportState = {preset:'month', area:'all', start:todayISO().slice(0,7)+'-01', end:todayISO()};
+function setReportPreset(preset){
+  const end = todayISO();
+  let start = reportState.start;
+  if(preset==='day') start = end;
+  if(preset==='week') start = addDaysISO(end,-6);
+  if(preset==='month') start = end.slice(0,7)+'-01';
+  reportState = {...reportState, preset, start, end};
+  render();
+}
+function setReportArea(area){
+  reportState = {...reportState, area};
+  render();
+}
+function reportDateInRange(date, start, end){
+  const value = String(date||'').slice(0,10);
+  return value>=start && value<=end;
+}
+function reportData(){
+  const {start,end} = reportState;
+  const purchaseBatches = (DB.purchaseBatches||[]).filter(p=>reportDateInRange(p.purchase_date,start,end));
+  const legacyPurchases = DB.purchases.filter(p=>!p.purchase_batch_id && reportDateInRange(p.purchase_date,start,end));
+  const purchaseItems = DB.purchases.filter(p=>reportDateInRange(p.purchase_date,start,end));
+  const sales = DB.sales.filter(s=>!s.cancelled && reportDateInRange(s.sale_date,start,end));
+  const productions = DB.productions.filter(p=>reportDateInRange(p.production_date,start,end));
+  const movements = (DB.movements||[]).filter(m=>reportDateInRange(m.movement_date||m.created_at,start,end));
+  const sum = (arr, field)=>arr.reduce((total,item)=>total+Number(typeof field==='function'?field(item):item[field]||0),0);
+  const purchaseTotal = sum(purchaseBatches,'total_cost') + sum(legacyPurchases,'total_cost');
+  const salesTotal = sum(sales,'total');
+  const salesCost = sum(sales,'cost');
+  const productionCost = sum(productions,'batch_cost');
+  const stockIngredientsValue = DB.ingredients.reduce((total,i)=>total+Number(i.stock)*Number(i.avg_cost),0);
+  const stockProductsValue = DB.products.reduce((total,p)=>total+Number(p.stock)*Number(p.last_unit_cost),0);
+  const categories = {};
+  purchaseBatches.forEach(p=>{ categories[p.purchase_category]=(categories[p.purchase_category]||0)+Number(p.total_cost); });
+  if(legacyPurchases.length) categories.legado=(categories.legado||0)+sum(legacyPurchases,'total_cost');
+  const ingredientTotals = {};
+  purchaseItems.forEach(item=>{
+    const ingredient = getIngredient(item.ingredient_id);
+    if(!ingredient) return;
+    if(!ingredientTotals[item.ingredient_id]) ingredientTotals[item.ingredient_id]={ingredient, purchasedBase:0, purchasedCost:0, consumedBase:0};
+    ingredientTotals[item.ingredient_id].purchasedBase += Number(item.qty_base)||convertToBase(Number(item.qty),item.unit);
+    ingredientTotals[item.ingredient_id].purchasedCost += Number(item.total_cost);
+  });
+  movements.filter(m=>m.item_type==='ingredient' && m.movement_type==='producao_saida').forEach(m=>{
+    const ingredient = getIngredient(m.item_id);
+    if(!ingredient) return;
+    if(!ingredientTotals[m.item_id]) ingredientTotals[m.item_id]={ingredient, purchasedBase:0, purchasedCost:0, consumedBase:0};
+    ingredientTotals[m.item_id].consumedBase += Math.abs(Number(m.qty_change)||0);
+  });
+  const purchaseEntries = purchaseBatches.map(batch=>({...batch, items:batch.items||[]}));
+  legacyPurchases.forEach(item=>purchaseEntries.push({
+    id:item.id, purchase_date:item.purchase_date, purchase_category:'legado', supplier_name:'Lançamento antigo', total_cost:item.total_cost,
+    receipt_reference:'', note:'Compra registrada antes do modelo composto', items:[item]
+  }));
+  return {start,end,purchaseBatches,legacyPurchases,purchaseItems,purchaseEntries,sales,productions,movements,purchaseTotal,purchaseCount:purchaseEntries.length,salesTotal,salesCost,productionCost,productionUnits:sum(productions,'usable_qty'),productionLosses:sum(productions,'qty_lost'),salesProfit:sum(sales,'profit'),categories,ingredientTotals,stockIngredientsValue,stockProductsValue};
+}
+function renderReportKpis(data){
+  return `<div class="grid">
+    <div class="kpi"><div class="label">Compras / saídas de caixa</div><div class="value">${fmtBRL(data.purchaseTotal)}</div><div class="muted">${data.purchaseCount} lançamento(s)</div></div>
+    <div class="kpi"><div class="label">Faturamento</div><div class="value">${fmtBRL(data.salesTotal)}</div><div class="muted">${data.sales.length} venda(s)</div></div>
+    <div class="kpi"><div class="label">Custo de produção</div><div class="value">${fmtBRL(data.productionCost)}</div><div class="muted">${data.productionUnits} un aproveitáveis</div></div>
+    <div class="kpi"><div class="label">Lucro bruto</div><div class="value ${data.salesProfit>=0?'good':'bad'}">${fmtBRL(data.salesProfit)}</div><div class="muted">Após custo dos produtos vendidos</div></div>
+    <div class="kpi"><div class="label">Estoque de ingredientes</div><div class="value">${fmtBRL(data.stockIngredientsValue)}</div><div class="muted">Custo médio atual</div></div>
+    <div class="kpi"><div class="label">Estoque de produtos</div><div class="value">${fmtBRL(data.stockProductsValue)}</div><div class="muted">Custo do último lote</div></div>
+  </div>`;
+}
+function renderReportPurchases(data){
+  const labels={mercado:'Mercado',casa_embalagens:'Casa de embalagens',outro:'Outro',legado:'Lançamento antigo'};
+  const categoryRows=Object.entries(data.categories).map(([category,total])=>`<tr><td>${labels[category]||category}</td><td>${fmtBRL(total)}</td></tr>`).join('');
+  const entries=data.purchaseEntries.map(entry=>`<div class="purchase-entry">
+    <div class="purchase-entry-head"><div><div class="purchase-entry-title">${fmtDate(entry.purchase_date)} · ${entry.supplier_name}</div><div class="muted">${labels[entry.purchase_category]||'Compra'}${entry.receipt_reference?' · Nota: '+entry.receipt_reference:''}</div></div><div class="purchase-entry-total">${fmtBRL(entry.total_cost)}</div></div>
+    <div class="report-table-wrap"><table><tr><th>Item</th><th>Compra</th><th>Estoque</th><th>Custo unitário</th><th>Valor</th></tr>${(entry.items||[]).map(item=>{const ing=getIngredient(item.ingredient_id);const pq=item.purchase_qty??item.qty;const pu=item.purchase_unit||item.unit;const cq=item.content_qty??1;const cu=item.content_unit||item.unit;const unitCost=Number(pq)>0?Number(item.total_cost)/Number(pq):0;return `<tr><td>${ing?ing.name:'Ingrediente removido'}</td><td>${pq} ${pu} × ${cq} ${cu}</td><td>${item.qty} ${item.unit}</td><td>${fmtBRL(unitCost)} / embalagem</td><td>${fmtBRL(item.total_cost)}</td></tr>`;}).join('')}</table></div>
+  </div>`).join('');
+  return `<div class="card report-section"><h3>Compras e caixa</h3><div class="grid"><div class="kpi"><div class="label">Total comprado</div><div class="value">${fmtBRL(data.purchaseTotal)}</div></div><div class="kpi"><div class="label">Quantidade de compras</div><div class="value">${data.purchaseCount}</div></div></div>${categoryRows?`<div class="report-table-wrap"><table><tr><th>Origem</th><th>Total</th></tr>${categoryRows}</table></div>`:''}${entries||'<div class="empty">Nenhuma compra no período.</div>'}</div>`;
+}
+function renderReportSales(data){
+  return `<div class="card report-section"><h3>Vendas e faturamento</h3><div class="report-table-wrap"><table><tr><th>Indicador</th><th>Valor</th></tr><tr><td>Faturamento</td><td>${fmtBRL(data.salesTotal)}</td></tr><tr><td>Custo dos produtos vendidos</td><td>${fmtBRL(data.salesCost)}</td></tr><tr><td>Lucro bruto</td><td>${fmtBRL(data.salesProfit)}</td></tr><tr><td>Margem bruta</td><td>${data.salesTotal>0?(data.salesProfit/data.salesTotal*100).toFixed(1):'0.0'}%</td></tr><tr><td>Quantidade de vendas</td><td>${data.sales.length}</td></tr></table></div>${data.sales.length?renderRecentSalesTable(data.sales.length,data.sales):'<div class="empty">Nenhuma venda no período.</div>'}</div>`;
+}
+function renderReportProduction(data){
+  const rows=data.productions.map(production=>{const product=getProduct(production.product_id);return `<tr><td>${fmtDate(production.production_date)}</td><td>${product?product.name:'Produto removido'}</td><td>${production.usable_qty} un</td><td>${production.qty_lost} un</td><td>${fmtBRL(production.batch_cost)}</td></tr>`;}).join('');
+  return `<div class="card report-section"><h3>Produção e custos</h3><div class="report-table-wrap"><table><tr><th>Indicador</th><th>Valor</th></tr><tr><td>Lotes produzidos</td><td>${data.productions.length}</td></tr><tr><td>Unidades aproveitáveis</td><td>${data.productionUnits}</td></tr><tr><td>Perdas</td><td>${data.productionLosses}</td></tr><tr><td>Custo total de produção</td><td>${fmtBRL(data.productionCost)}</td></tr></table></div>${rows?`<div class="report-table-wrap"><table><tr><th>Data</th><th>Produto</th><th>Aproveitadas</th><th>Perdas</th><th>Custo</th></tr>${rows}</table></div>`:'<div class="empty">Nenhuma produção no período.</div>'}</div>`;
+}
+function renderReportIngredients(data){
+  const rows=Object.values(data.ingredientTotals).sort((a,b)=>a.ingredient.name.localeCompare(b.ingredient.name)).map(item=>`<tr><td>${item.ingredient.name}</td><td>${fmtBRL(item.purchasedCost)}</td><td>${displayQty(item.purchasedBase,item.ingredient.family)}</td><td>${displayQty(item.consumedBase,item.ingredient.family)}</td><td>${displayQty(Number(item.ingredient.stock),item.ingredient.family)}</td><td>${fmtBRL(Number(item.ingredient.stock)*Number(item.ingredient.avg_cost))}</td></tr>`).join('');
+  return `<div class="card report-section"><h3>Ingredientes e insumos</h3><div class="summary-note">Esta tabela separa o que foi comprado no período, o que foi consumido na produção e o saldo físico atual de cada item. O valor do estoque usa o custo médio acumulado.</div>${rows?`<div class="report-table-wrap"><table><tr><th>Ingrediente</th><th>Compras</th><th>Qtd. comprada</th><th>Consumo</th><th>Saldo atual</th><th>Valor atual</th></tr>${rows}</table></div>`:'<div class="empty">Nenhum movimento de ingrediente no período.</div>'}</div>`;
+}
+function renderReportStock(data){
+  const ingredientRows=DB.ingredients.map(i=>`<tr><td>${i.name}</td><td>Ingrediente</td><td>${displayQty(Number(i.stock),i.family)}</td><td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td><td>${displayCostPerBase(Number(i.avg_cost),i.family)}</td></tr>`).join('');
+  const productRows=DB.products.map(p=>`<tr><td>${p.name}</td><td>Produto</td><td>${p.stock} un</td><td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td><td>${fmtBRL(Number(p.last_unit_cost))} /un</td></tr>`).join('');
+  return `<div class="card report-section"><h3>Estoque e valor patrimonial</h3><div class="grid"><div class="kpi"><div class="label">Ingredientes</div><div class="value">${fmtBRL(data.stockIngredientsValue)}</div></div><div class="kpi"><div class="label">Produtos acabados</div><div class="value">${fmtBRL(data.stockProductsValue)}</div></div><div class="kpi"><div class="label">Estoque total</div><div class="value">${fmtBRL(data.stockIngredientsValue+data.stockProductsValue)}</div></div></div><div class="report-table-wrap"><table><tr><th>Item</th><th>Tipo</th><th>Quantidade</th><th>Valor atual</th><th>Custo utilizado</th></tr>${ingredientRows}${productRows}</table></div></div>`;
+}
+function renderRelatorios(){
+  const data=reportData();
+  const visible=area=>reportState.area==='all'||reportState.area===area;
+  return `<div class="card no-print"><h2>Relatórios financeiros e operacionais</h2><div class="summary-note">Escolha um período e uma área. A opção consolidada reúne caixa, compras, vendas, produção, ingredientes e estoque. Use “Imprimir relatório” para gerar uma versão pronta para salvar ou anexar à prestação de contas.</div><div class="report-toolbar" style="margin-top:12px;"><div class="field"><label>Data inicial</label><input id="reportStart" type="date" value="${data.start}"></div><div class="field"><label>Data final</label><input id="reportEnd" type="date" value="${data.end}"></div><div class="presets"><button class="secondary ${reportState.preset==='day'?'active':''}" type="button" data-report-preset="day">Hoje</button><button class="secondary ${reportState.preset==='week'?'active':''}" type="button" data-report-preset="week">Semana</button><button class="secondary ${reportState.preset==='month'?'active':''}" type="button" data-report-preset="month">Mês</button></div><button class="secondary" id="printReport" type="button">Imprimir relatório</button></div><div class="presets" style="margin-top:10px;"><button class="secondary ${reportState.area==='all'?'active':''}" type="button" data-report-area="all">Consolidado</button><button class="secondary ${reportState.area==='compras'?'active':''}" type="button" data-report-area="compras">Compras</button><button class="secondary ${reportState.area==='vendas'?'active':''}" type="button" data-report-area="vendas">Vendas</button><button class="secondary ${reportState.area==='producao'?'active':''}" type="button" data-report-area="producao">Produção</button><button class="secondary ${reportState.area==='ingredientes'?'active':''}" type="button" data-report-area="ingredientes">Ingredientes</button><button class="secondary ${reportState.area==='estoque'?'active':''}" type="button" data-report-area="estoque">Estoque</button></div></div><div class="print-only"><h1>Relatório do Controle Empadões</h1><p>Período: ${periodLabel(data.start,data.end)}</p></div><div class="card"><h2>${reportState.area==='all'?'Relatório consolidado':'Relatório de '+({compras:'compras',vendas:'vendas',producao:'produção',ingredientes:'ingredientes e insumos',estoque:'estoque'}[reportState.area]||'área')}</h2><div class="muted">Período: ${periodLabel(data.start,data.end)}</div>${renderReportKpis(data)}</div>${visible('compras')?renderReportPurchases(data):''}${visible('vendas')?renderReportSales(data):''}${visible('producao')?renderReportProduction(data):''}${visible('ingredientes')?renderReportIngredients(data):''}${visible('estoque')?renderReportStock(data):''}`;
+}
+
+let saleDraftLines = [];
+function renderVendas(){
+  const rows = DB.sales.map(s=>`<tr>
+    <td>${fmtDate(s.sale_date)}</td>
+    <td>${s.items.map(i=>(getProduct(i.product_id)?.name||'?')+' x'+i.qty).join(', ')}</td>
+    <td>${fmtBRL(s.total)}</td>
+    <td style="color:${Number(s.profit)>=0?'var(--good)':'var(--bad)'}">${fmtBRL(s.profit)}</td>
+    <td>${s.cancelled ? '<span class="badge low">Cancelada</span>' : `<button class="danger" data-cancel="${s.id}">Cancelar</button>`}</td>
+  </tr>`).join('');
+  return `
+  <div class="card"><h2>Nova venda</h2>
+    ${!DB.products.some(p=>p.stock>0) ? '<div class="empty">Nenhum produto com estoque disponível. Produza primeiro.</div>' : `
+    <div id="saleLinesList"></div>
+    <button class="secondary" id="addSaleLine" type="button">+ Adicionar item</button>
+    <label style="margin-top:10px;">Data</label><input id="saleDate" type="date" value="${todayISO()}">
+    <label>Desconto (R$, opcional)</label><input id="saleDiscount" type="number" step="any" value="0">
+    <div id="saleTotalPreview" class="muted" style="margin:8px 0;font-weight:600;"></div>
+    <button class="primary" id="confirmSaleBtn" type="button">Finalizar venda</button>
+    `}
+  </div>
+  <div class="card"><h2>Histórico de vendas</h2>
+    ${DB.sales.length ? `<table><tr><th>Data</th><th>Itens</th><th>Total</th><th>Lucro</th><th></th></tr>${rows}</table>` : '<div class="empty">Nenhuma venda registrada.</div>'}
+  </div>`;
+}
+function renderSaleLineRow(idx, line){
+  const opts = DB.products.filter(p=>p.stock>0).map(p=>`<option value="${p.id}" ${line&&line.productId===p.id?'selected':''}>${p.name} (estoque: ${p.stock})</option>`).join('');
+  return `<div class="sale-line" data-idx="${idx}">
+    <select class="sl-product">${opts}</select>
+    <input class="sl-qty" type="number" step="any" placeholder="Qtd" value="${line?line.qty:1}">
+    <input class="sl-price" type="number" step="any" placeholder="Preço un." value="${line?line.unitPrice:''}">
+    <button type="button" class="danger sl-remove">✕</button>
+  </div>`;
+}
+function refreshSaleLinesList(){
+  const container = document.getElementById('saleLinesList');
+  if(!container) return;
+  container.innerHTML = saleDraftLines.map((l,idx)=>renderSaleLineRow(idx,l)).join('');
+  container.querySelectorAll('.sl-remove').forEach(btn=>{
+    btn.onclick=(e)=>{ saleDraftLines.splice(+e.target.closest('.sale-line').dataset.idx,1); refreshSaleLinesList(); updateSaleTotalPreview(); };
+  });
+  container.querySelectorAll('.sl-product,.sl-qty,.sl-price').forEach(el=>{
+    el.addEventListener('input', updateSaleTotalPreview);
+    el.addEventListener('change', ()=>{
+      const row = el.closest('.sale-line');
+      const prodSel = row.querySelector('.sl-product');
+      const priceInput = row.querySelector('.sl-price');
+      const p = getProduct(prodSel.value);
+      if(p && !priceInput.value) priceInput.value = p.price;
+      updateSaleTotalPreview();
+    });
+  });
+}
+function collectSaleLines(){
+  const container = document.getElementById('saleLinesList');
+  if(!container) return [];
+  return [...container.querySelectorAll('.sale-line')].map(r=>({
+    productId: r.querySelector('.sl-product').value,
+    qty: parseFloat(r.querySelector('.sl-qty').value)||0,
+    unitPrice: parseFloat(r.querySelector('.sl-price').value)||0
+  })).filter(l=>l.productId && l.qty>0);
+}
+function updateSaleTotalPreview(){
+  const lines = collectSaleLines();
+  const discount = parseFloat(document.getElementById('saleDiscount')?.value)||0;
+  const total = lines.reduce((a,l)=>a+l.qty*l.unitPrice,0) - discount;
+  const el = document.getElementById('saleTotalPreview');
+  if(el) el.textContent = 'Total da venda: ' + fmtBRL(total);
+}
+
+// ===================== HANDLERS =====================
+function attachHandlers(){
+  document.querySelectorAll('.save-ingredient').forEach(btn=>btn.onclick = async e=>{
+    const id = e.currentTarget.dataset.id;
+    const result = await updateIngredient(id, document.querySelector('.ing-name[data-id="'+id+'"]')?.value, document.querySelector('.ing-min[data-id="'+id+'"]')?.value);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    toast('Ingrediente atualizado!'); render();
+  });
+  document.querySelectorAll('.save-product').forEach(btn=>btn.onclick = async e=>{
+    const id = e.currentTarget.dataset.id;
+    const result = await updateProduct(id, document.querySelector('.prod-name[data-id="'+id+'"]')?.value, document.querySelector('.prod-price[data-id="'+id+'"]')?.value, Number(getProduct(id)?.min_stock)||0);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    toast('Produto atualizado!'); render();
+  });
+  const addIngredientFromPurchase = document.getElementById('addIngredientFromPurchase');
+  if(addIngredientFromPurchase) addIngredientFromPurchase.onclick = async ()=>{
+    syncPurchaseDraftFromDom();
+    const name = prompt('Nome do ingrediente ou insumo:');
+    if(!name?.trim()) return;
+    const unit = prompt('Unidade: kg, g, l, ml ou un','un')?.trim().toLowerCase();
+    if(!UNIT_FAMILY[unit]){ toast('Unidade inválida. Use kg, g, l, ml ou un.'); return; }
+    const result = await registerIngredient(name, unit, 0);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    purchaseDraftItems.push({ingredientId:result.data.id,purchaseQty:1,purchaseUnit:'pacote',contentQty:1,contentUnit:unit,totalCost:''});
+    toast('Item cadastrado e adicionado à compra.'); render();
+  };
+  const openReports = document.getElementById('openReports');
+  if(openReports) openReports.onclick = ()=>{
+    activeTab = 'relatorios';
+    document.querySelectorAll('#nav button').forEach(btn=>btn.classList.toggle('active', btn.dataset.tab==='relatorios'));
+    render();
+  };
+  document.querySelectorAll('#nav button').forEach(btn=>{
+    btn.onclick = ()=>{
+      activeTab = btn.dataset.tab;
+      document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      recipeDraftItems = []; saleDraftLines = []; purchaseDraftItems = [];
+      render();
+    };
+  });
+
+  const fi = document.getElementById('form-ingrediente');
+  if(fi) fi.onsubmit = async (e)=>{
+    e.preventDefault();
+    const f = new FormData(fi);
+    const result = await registerIngredient(f.get('name'), f.get('unit'), parseFloat(f.get('minStock'))||0);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    toast('Ingrediente cadastrado!'); render();
+  };
+
+  const addPurchaseItem = document.getElementById('addPurchaseItem');
+  if(addPurchaseItem){
+    if(!purchaseDraftItems.length){
+      const firstIngredient = DB.ingredients[0];
+      purchaseDraftItems.push({ingredientId:firstIngredient?.id, purchaseQty:'', purchaseUnit:'pacote', contentQty:1, contentUnit:firstIngredient?.unit||'un', totalCost:''});
+    }
+    refreshPurchaseItemsList();
+  }
+  const fc = document.getElementById('form-compra');
+  if(fc) fc.onsubmit = async (e)=>{
+    e.preventDefault();
+    const f = new FormData(fc);
+    const items = [...fc.querySelectorAll('.purchase-item')].map(row=>({
+      ingredientId:row.dataset.ingredientId || DB.ingredients.find(item=>item.name.trim().toLowerCase()===row.querySelector('.pi-ingredient-name').value.trim().toLowerCase())?.id,
+      purchaseQty:parseFloat(row.querySelector('.pi-purchase-qty').value),
+      purchaseUnit:row.querySelector('.pi-purchase-unit').value,
+      contentQty:parseFloat(row.querySelector('.pi-content-qty').value),
+      contentUnit:row.querySelector('.pi-content-unit').value,
+      totalCost:parseFloat(row.querySelector('.pi-total').value)
+    }));
+    const totalInput = document.getElementById('purchaseTotal');
+    const submitButton = fc.querySelector('button[type=submit]');
+    if(submitButton) submitButton.disabled = true;
+    const result = await registerPurchaseBatch(f.get('date'), f.get('category'), f.get('supplierName'), parseFloat(totalInput.value), items, f.get('note'), f.get('receiptReference'));
+    if(submitButton) submitButton.disabled = false;
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    purchaseDraftItems = [];
+    toast('Compra completa registrada! Caixa, estoque e custo médio atualizados.'); render();
+  };
+
+  document.querySelectorAll('[data-report-preset]').forEach(btn=>{
+    btn.onclick = ()=>setReportPreset(btn.dataset.reportPreset);
+  });
+  document.querySelectorAll('[data-report-area]').forEach(btn=>{
+    btn.onclick = ()=>setReportArea(btn.dataset.reportArea);
+  });
+  const reportStart = document.getElementById('reportStart');
+  const reportEnd = document.getElementById('reportEnd');
+  const applyReportDates = ()=>{
+    const start = reportStart?.value;
+    const end = reportEnd?.value;
+    if(!start || !end){ toast('Informe as duas datas do relatório.'); return; }
+    if(start>end){ toast('A data inicial não pode ser posterior à data final.'); return; }
+    reportState = {...reportState, preset:'custom', start, end};
+    render();
+  };
+  if(reportStart) reportStart.onchange = applyReportDates;
+  if(reportEnd) reportEnd.onchange = applyReportDates;
+  const printReport = document.getElementById('printReport');
+  if(printReport) printReport.onclick = ()=>window.print();
+
+  const fp = document.getElementById('form-produto');
+  if(fp) fp.onsubmit = async (e)=>{
+    e.preventDefault();
+    const f = new FormData(fp);
+    const result = await registerProduct(f.get('name'), parseFloat(f.get('price')), parseFloat(f.get('minStock'))||0);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    toast('Produto cadastrado!'); render();
+  };
+
+  const addRi = document.getElementById('addRecipeItem');
+  if(addRi){
+    if(!recipeDraftItems.length) recipeDraftItems.push({ingredientId:DB.ingredients[0]?.id,qty:'',unit:'kg'});
+    refreshRecipeItemsList();
+    addRi.onclick = ()=>{ recipeDraftItems.push({ingredientId:DB.ingredients[0]?.id,qty:'',unit:'kg'}); refreshRecipeItemsList(); };
+  }
+  const saveRecipeBtn = document.getElementById('saveRecipeBtn');
+  if(saveRecipeBtn) saveRecipeBtn.onclick = async ()=>{
+    const productId = document.getElementById('fichaProduct').value;
+    const yieldQty = parseFloat(document.getElementById('fichaYield').value)||1;
+    const rows = [...document.getElementById('recipeItemsList').querySelectorAll('.recipe-item')];
+    const items = rows.map(r=>({
+      ingredientId: r.querySelector('.ri-ingredient').value,
+      qty: parseFloat(r.querySelector('.ri-qty').value)||0,
+      unit: r.querySelector('.ri-unit').value
+    })).filter(it=>it.qty>0);
+    if(!items.length){ toast('Adicione ao menos um ingrediente.'); return; }
+    const result = await saveRecipe(productId, items, yieldQty);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    toast('Ficha técnica salva!'); recipeDraftItems = []; render();
+  };
+
+  const fpr = document.getElementById('form-producao');
+  if(fpr){
+    const checkStock = ()=>{
+      const productId = document.getElementById('producaoProduct').value;
+      const qtyProduced = parseFloat(fpr.querySelector('[name=qtyProduced]').value)||0;
+      const el = document.getElementById('producaoStockCheck');
+      if(!qtyProduced){ el.textContent=''; return; }
+      const check = checkStockForProduction(productId, qtyProduced);
+      el.innerHTML = check.ok ? '<span style="color:var(--good)">✓ Estoque suficiente</span>'
+        : '<span style="color:var(--bad)">⚠ Faltam: '+check.missing.map(m=>m.name+' ('+displayQty(m.need-m.have,m.family)+' faltando)').join(', ')+'</span>';
+    };
+    fpr.querySelector('[name=qtyProduced]').addEventListener('input', checkStock);
+    document.getElementById('producaoProduct').addEventListener('change', checkStock);
+    fpr.onsubmit = async (e)=>{
+      e.preventDefault();
+      const f = new FormData(fpr);
+      const productId = f.get('productId');
+      const qtyProduced = parseFloat(f.get('qtyProduced'));
+      const qtyLost = parseFloat(f.get('qtyLost'))||0;
+      const result = await registerProduction(productId, f.get('date'), qtyProduced, qtyLost, false);
+      if(!result.ok){
+        if(result.missing && confirm(result.msg + '\n\nDeseja confirmar mesmo assim (estoque ficará zerado)?')){
+          const forcedResult = await registerProduction(productId, f.get('date'), qtyProduced, qtyLost, true);
+          if(!forcedResult.ok){ toast('Erro: '+forcedResult.msg); return; }
+          toast('Produção registrada (com estoque forçado).'); render();
+        } else if(!result.missing){ toast('Erro: '+result.msg); }
+        return;
+      }
+      toast('Produção registrada! Estoque atualizado.'); render();
+    };
+  }
+
+  const addSl = document.getElementById('addSaleLine');
+  if(addSl){
+    if(!saleDraftLines.length){
+      const firstProd = DB.products.find(p=>p.stock>0);
+      saleDraftLines.push({productId:firstProd?firstProd.id:null, qty:1, unitPrice: firstProd?firstProd.price:''});
+    }
+    refreshSaleLinesList(); updateSaleTotalPreview();
+    addSl.onclick = ()=>{
+      const firstProd = DB.products.find(p=>p.stock>0);
+      saleDraftLines.push({productId:firstProd?firstProd.id:null, qty:1, unitPrice: firstProd?firstProd.price:''});
+      refreshSaleLinesList(); updateSaleTotalPreview();
+    };
+    document.getElementById('saleDiscount').addEventListener('input', updateSaleTotalPreview);
+  }
+  const confirmSaleBtn = document.getElementById('confirmSaleBtn');
+  if(confirmSaleBtn) confirmSaleBtn.onclick = async ()=>{
+    const lines = collectSaleLines();
+    if(!lines.length){ toast('Adicione ao menos um item.'); return; }
+    const discount = parseFloat(document.getElementById('saleDiscount').value)||0;
+    const date = document.getElementById('saleDate').value || todayISO();
+    const result = await registerSale(lines, date, discount);
+    if(!result.ok){ toast(result.msg); return; }
+    toast('Venda registrada!'); saleDraftLines = []; render();
+  };
+
+  document.querySelectorAll('[data-cancel]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      if(confirm('Cancelar esta venda? O estoque será devolvido.')){
+        const result = await cancelSale(btn.dataset.cancel);
+        if(!result.ok){ toast('Erro: '+result.msg); return; }
+        toast('Venda cancelada e estoque revertido.'); render();
+      }
+    };
+  });
+}
+
+// ===================== BOOT =====================
+async function boot(){
+  if(booted) return;
+  booted = true;
+  await loadAll();
+  render();
+}
+
+// check existing session on load
+supabase.auth.getSession().then(({data:{session}})=>{
+  if(session){
+    document.getElementById('authScreen').style.display='none';
+    document.getElementById('appRoot').style.display='block';
+    boot();
+  }
+});
+</script>
+</body>
+</html>

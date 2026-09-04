@@ -38,3 +38,8 @@
 - [ ] Confirmar a identidade de e-mail/noreply associada à conta GitHub correta
 - [ ] Corrigir a autoria dos commits enviados ao `main` sem alterar o conteúdo do projeto
 - [ ] Confirmar novo push no `main` e verificar o deployment automático da Vercel
+- [ ] Restaurar o design original do HTML publicado, sem alterar a experiência visual existente
+- [ ] Restaurar todos os módulos, abas, formulários e relatórios que estavam acessíveis no site original
+- [ ] Confirmar que os dados existentes continuam visíveis depois do login com o RLS multiempresa
+- [ ] Remover a substituição prematura pelo shell React incompleto da produção
+- [ ] Publicar a restauração pelo GitHub e validar novamente a URL Empadão

@@ -31,3 +31,7 @@
 - [x] Confirmar que nenhuma chave `service_role` ou segredo administrativo chega ao bundle do browser
 - [x] Testar rotas, fallback de assets e deep links no hosting estático da Vercel
 - [ ] Verificar comportamento em ambos os domínios personalizados e no domínio `.vercel.app`
+- [ ] Integrar o branch `multiempresa-react-vercel` no `main` do repositório GitHub
+- [ ] Confirmar que o `main` contém o projeto React/Vite completo e não apenas o HTML antigo
+- [ ] Confirmar que a Vercel deteta o push no `main` e gera o novo deployment automaticamente
+- [ ] Verificar a URL de produção após a atualização automática

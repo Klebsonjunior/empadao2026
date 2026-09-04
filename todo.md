@@ -34,12 +34,22 @@
 - [ ] Integrar o branch `multiempresa-react-vercel` no `main` do repositório GitHub
 - [ ] Confirmar que o `main` contém o projeto React/Vite completo e não apenas o HTML antigo
 - [ ] Confirmar que a Vercel deteta o push no `main` e gera o novo deployment automaticamente
-- [ ] Verificar a URL de produção após a atualização automática
-- [ ] Confirmar a identidade de e-mail/noreply associada à conta GitHub correta
-- [ ] Corrigir a autoria dos commits enviados ao `main` sem alterar o conteúdo do projeto
-- [ ] Confirmar novo push no `main` e verificar o deployment automático da Vercel
-- [ ] Restaurar o design original do HTML publicado, sem alterar a experiência visual existente
-- [ ] Restaurar todos os módulos, abas, formulários e relatórios que estavam acessíveis no site original
+- [x] Verificar a URL de produção após a atualização automática
+- [x] Confirmar a identidade de e-mail/noreply associada à conta GitHub correta
+- [x] Corrigir a autoria dos commits enviados ao `main` sem alterar o conteúdo do projeto
+- [x] Confirmar novo push no `main` e verificar o deployment automático da Vercel
+- [x] Restaurar o design original do HTML publicado, sem alterar a experiência visual existente
+- [x] Restaurar todos os módulos, abas, formulários e relatórios que estavam acessíveis no site original
 - [ ] Confirmar que os dados existentes continuam visíveis depois do login com o RLS multiempresa
-- [ ] Remover a substituição prematura pelo shell React incompleto da produção
-- [ ] Publicar a restauração pelo GitHub e validar novamente a URL Empadão
+- [x] Remover a substituição prematura pelo shell React incompleto da produção
+- [x] Publicar a restauração pelo GitHub e validar novamente a URL Empadão
+- [ ] Permitir editar a unidade de medida de um ingrediente existente
+- [ ] Disponibilizar unidades como grama, quilograma, mililitro, litro e unidade
+- [ ] Atualizar visualmente a unidade no formulário de compras, estoque e receitas após a edição
+- [ ] Validar a mudança do requeijão de unidade para grama sem perder o estoque existente
+- [ ] Publicar a melhoria no `main` e confirmar a atualização automática da Vercel
+- [ ] Adicionar tamanho/peso e unidade ao cadastro de produtos
+- [ ] Permitir editar o tamanho/peso de produtos já cadastrados
+- [ ] Mostrar o tamanho nos seletores de venda, tabelas e relatórios
+- [ ] Preservar produtos legados sem tamanho definido durante a migração
+- [ ] Publicar a melhoria no `main` e validar o cadastro de 350 g e 600 g

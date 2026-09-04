@@ -174,6 +174,9 @@ function failedResult(error, fallback){
 }
 
 const UNIT_FAMILY = {kg:'peso', g:'peso', l:'volume', ml:'volume', un:'unidade'};
+const UNIT_LABELS = {kg:'kg', g:'g', l:'L', ml:'ml', un:'un'};
+function renderUnitOptions(selected){ return Object.entries(UNIT_LABELS).map(([value,label])=>`<option value="${value}" ${selected===value?'selected':''}>${label}</option>`).join(''); }
+function renderOptionalUnitOptions(selected){ return `<option value="" ${!selected?'selected':''}>—</option>` + renderUnitOptions(selected); }
 const TO_BASE = {kg:1000, g:1, l:1000, ml:1, un:1};
 const BASE_LABEL = {peso:'g', volume:'ml', unidade:'un'};
 function convertToBase(qty, unit){ return qty * TO_BASE[unit]; }
@@ -304,6 +307,11 @@ async function loadAll(){
 
 function getIngredient(id){ return DB.ingredients.find(i=>i.id===id); }
 function getProduct(id){ return DB.products.find(p=>p.id===id); }
+function formatProductLabel(product){
+  if(!product) return '?';
+  const size = Number(product.size_value)>0 && product.size_unit ? ` · ${product.size_value} ${UNIT_LABELS[product.size_unit]||product.size_unit}` : '';
+  return `${product.name}${size}`;
+}
 function getRecipeByProduct(productId){
   const r = DB.recipes[productId];
   if(!r) return null;
@@ -415,41 +423,59 @@ async function registerPurchaseBatch(purchaseDate, purchaseCategory, supplierNam
   return loaded.ok ? {ok:true, data} : loaded;
 }
 
-async function registerProduct(name, price, minStock){
+async function registerProduct(name, price, minStock, sizeValue, sizeUnit){
   const cleanName = String(name||'').trim();
   const salePrice = Number(price);
   const minimum = Number(minStock)||0;
+  const size = Number(sizeValue);
+  const unit = String(sizeUnit||'').trim().toLowerCase();
   if(!cleanName) return failedResult({message:'Informe o nome do produto.'});
   if(!(salePrice>=0)) return failedResult({message:'Informe um preço de venda válido.'});
   if(minimum<0) return failedResult({message:'O estoque mínimo não pode ser negativo.'});
+  if(!(size>0) || !UNIT_LABELS[unit]) return failedResult({message:'Informe um tamanho e uma unidade válidos para o produto.'});
 
   const {data, error} = await supabase.from('products').insert({
-    name:cleanName, price:salePrice, stock:0, min_stock: minimum, last_unit_cost:0
+    name:cleanName, size_value:size, size_unit:unit, price:salePrice, stock:0, min_stock: minimum, last_unit_cost:0
   }).select().single();
   if(error) return failedResult(error, 'Não foi possível cadastrar o produto.');
   const loaded = await loadAll();
   return loaded.ok ? {ok:true, data} : loaded;
 }
 
-async function updateIngredient(id, name, minStock){
+async function updateIngredient(id, name, minStock, unit){
   const ingredient = getIngredient(id);
   const cleanName = String(name||'').trim();
+  const newUnit = String(unit||'').trim().toLowerCase();
   const minimum = Number(minStock);
   if(!ingredient || !cleanName) return failedResult({message:'Informe um nome válido para o ingrediente.'});
+  if(!UNIT_FAMILY[newUnit]) return failedResult({message:'Selecione uma unidade válida.'});
   if(!(minimum>=0)) return failedResult({message:'O estoque mínimo deve ser zero ou maior.'});
-  const {error} = await supabase.from('ingredients').update({name:cleanName,min_stock:convertToBase(minimum,ingredient.unit),updated_at:new Date().toISOString()}).eq('id',id);
+  if(UNIT_FAMILY[newUnit] !== ingredient.family && Number(ingredient.stock) !== 0){
+    return failedResult({message:'Não é possível mudar a família da unidade enquanto existe estoque. Ajuste o estoque para zero antes de trocar entre unidade, peso ou volume.'});
+  }
+  const {error} = await supabase.from('ingredients').update({
+    name:cleanName,
+    unit:newUnit,
+    family:UNIT_FAMILY[newUnit],
+    min_stock:convertToBase(minimum,newUnit),
+    updated_at:new Date().toISOString()
+  }).eq('id',id);
   if(error) return failedResult(error,'Não foi possível atualizar o ingrediente.');
   const loaded = await loadAll();
   return loaded.ok ? {ok:true} : loaded;
 }
 
-async function updateProduct(id, name, price, minStock){
+async function updateProduct(id, name, price, minStock, sizeValue, sizeUnit){
   const cleanName = String(name||'').trim();
   const salePrice = Number(price);
   const minimum = Number(minStock);
+  const rawSize = String(sizeValue??'').trim();
+  const size = rawSize ? Number(rawSize) : null;
+  const unit = String(sizeUnit||'').trim().toLowerCase();
   if(!getProduct(id) || !cleanName) return failedResult({message:'Informe um nome válido para o produto.'});
   if(!(salePrice>=0) || !(minimum>=0)) return failedResult({message:'Informe preço e estoque mínimo válidos.'});
-  const {error} = await supabase.from('products').update({name:cleanName,price:salePrice,min_stock:minimum,updated_at:new Date().toISOString()}).eq('id',id);
+  if((rawSize && (!(size>0) || !UNIT_LABELS[unit])) || (!rawSize && unit)) return failedResult({message:'Preencha o tamanho e a unidade do produto, ou deixe ambos vazios para manter um produto legado.'});
+  const {error} = await supabase.from('products').update({name:cleanName,size_value:size,size_unit:unit||null,price:salePrice,min_stock:minimum,updated_at:new Date().toISOString()}).eq('id',id);
   if(error) return failedResult(error,'Não foi possível atualizar o produto.');
   const loaded = await loadAll();
   return loaded.ok ? {ok:true} : loaded;
@@ -568,7 +594,7 @@ async function registerSale(lines, date, discount){
     const quantity = Number(l.qty);
     if(!p || !(quantity>0)) return {ok:false, msg:'Selecione produtos e quantidades válidas.'};
     quantities[l.productId] = (quantities[l.productId]||0) + quantity;
-    if(Number(p.stock) < quantities[l.productId]) return {ok:false, msg:'Estoque insuficiente para '+p.name};
+    if(Number(p.stock) < quantities[l.productId]) return {ok:false, msg:'Estoque insuficiente para '+formatProductLabel(p)};
   }
   let grossTotal=0, cost=0;
   const itemsToInsert = [];
@@ -714,7 +740,7 @@ function renderLowStockAlerts(){
   if(!lowIng.length && !lowProd.length) return '<div class="empty">Nenhum alerta no momento.</div>';
   let html='';
   lowIng.forEach(i=>html+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">🧂 <b>${i.name}</b> — ${displayQty(Number(i.stock),i.family)} <span class="muted">(mín: ${displayQty(Number(i.min_stock),i.family)})</span></div>`);
-  lowProd.forEach(p=>html+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">🥧 <b>${p.name}</b> — ${p.stock} un <span class="muted">(mín: ${p.min_stock} un)</span></div>`);
+  lowProd.forEach(p=>html+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">🥧 <b>${formatProductLabel(p)}</b> — ${p.stock} un <span class="muted">(mín: ${p.min_stock} un)</span></div>`);
   return html;
 }
 function renderRecentSalesTable(limit, source=DB.sales){
@@ -722,7 +748,7 @@ function renderRecentSalesTable(limit, source=DB.sales){
   if(!sales.length) return '<div class="empty">Nenhuma venda registrada ainda.</div>';
   const rows = sales.map(s=>`<tr>
     <td>${fmtDate(s.sale_date)}</td>
-    <td>${s.items.map(i=>(getProduct(i.product_id)?.name||'?')+' x'+i.qty).join(', ')}</td>
+    <td>${s.items.map(i=>formatProductLabel(getProduct(i.product_id))+' x'+i.qty).join(', ')}</td>
     <td>${fmtBRL(s.total)}</td>
     <td style="color:${Number(s.profit)>=0?'var(--good)':'var(--bad)'}">${fmtBRL(s.profit)}</td>
   </tr>`).join('');
@@ -732,7 +758,9 @@ function renderRecentSalesTable(limit, source=DB.sales){
 function renderIngredientes(){
   const totalValue = DB.ingredients.reduce((sum,i)=>sum+Number(i.stock)*Number(i.avg_cost),0);
   const rows = DB.ingredients.map(i=>`<tr>
-    <td><input class="sheet-input ing-name" data-id="${i.id}" value="${i.name.replace(/"/g,'&quot;')}"></td><td>${displayQty(Number(i.stock),i.family)}</td>
+    <td><input class="sheet-input ing-name" data-id="${i.id}" value="${i.name.replace(/"/g,'&quot;')}"></td>
+    <td><select class="sheet-input ing-unit" data-id="${i.id}">${renderUnitOptions(i.unit)}</select></td>
+    <td>${displayQty(Number(i.stock),i.family)}</td>
     <td>${displayCostPerBase(Number(i.avg_cost),i.family)}</td>
     <td><input class="sheet-input ing-min" data-id="${i.id}" type="number" min="0" step="any" value="${Number(i.min_stock)/TO_BASE[i.unit]}"></td>
     <td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td><td class="sheet-actions"><button class="secondary save-ingredient" data-id="${i.id}" type="button">Salvar</button></td>
@@ -753,7 +781,7 @@ function renderIngredientes(){
     </form>
   </div>
   <div class="card"><h2>Ingredientes cadastrados</h2>
-    ${DB.ingredients.length ? `<div class="summary-note">Valor total dos ingredientes em estoque: <b>${fmtBRL(totalValue)}</b></div><div class="report-table-wrap"><table><tr><th>Nome</th><th>Quantidade</th><th>Custo médio</th><th>Estoque mínimo</th><th>Valor total</th><th></th></tr>${rows}<tr class="sheet-total"><td colspan="4">Total em estoque</td><td>${fmtBRL(totalValue)}</td><td></td></tr></table></div>` : '<div class="empty">Nenhum ingrediente cadastrado.</div>'}
+    ${DB.ingredients.length ? `<div class="summary-note">Valor total dos ingredientes em estoque: <b>${fmtBRL(totalValue)}</b></div><div class="report-table-wrap"><table><tr><th>Nome</th><th>Unidade</th><th>Quantidade</th><th>Custo médio</th><th>Estoque mínimo</th><th>Valor total</th><th></th></tr>${rows}<tr class="sheet-total"><td colspan="5">Total em estoque</td><td>${fmtBRL(totalValue)}</td><td></td></tr></table></div>` : '<div class="empty">Nenhum ingrediente cadastrado.</div>'}
   </div>`;
 }
 
@@ -912,20 +940,21 @@ function renderProdutos(){
   const rows = DB.products.map(p=>{
     const cost = Number(p.last_unit_cost) || recipeCostPerUnit(p.id);
     const margin = p.price>0 ? ((p.price-cost)/p.price*100) : 0;
-    return `<tr><td><input class="sheet-input prod-name" data-id="${p.id}" value="${p.name.replace(/"/g,'&quot;')}"></td><td><input class="sheet-input prod-price" data-id="${p.id}" type="number" min="0" step="0.01" value="${Number(p.price)}"></td><td>${fmtBRL(cost)}</td>
+    return `<tr><td><input class="sheet-input prod-name" data-id="${p.id}" value="${p.name.replace(/"/g,'&quot;')}"></td><td><input class="sheet-input prod-size" data-id="${p.id}" type="number" min="0" step="any" value="${p.size_value??''}" placeholder="Tamanho"></td><td><select class="sheet-input prod-size-unit" data-id="${p.id}">${renderOptionalUnitOptions(p.size_unit)}</select></td><td><input class="sheet-input prod-price" data-id="${p.id}" type="number" min="0" step="0.01" value="${Number(p.price)}"></td><td>${fmtBRL(cost)}</td>
       <td style="color:${margin>=0?'var(--good)':'var(--bad)'}">${margin.toFixed(0)}%</td><td>${p.stock} un</td><td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td><td class="sheet-actions"><button class="secondary save-product" data-id="${p.id}" type="button">Salvar</button></td></tr>`;
   }).join('');
   return `
   <div class="card"><h2>Novo produto</h2>
     <form id="form-produto">
-      <label>Nome</label><input name="name" required placeholder="Ex: Empadão de Frango 1kg">
+      <label>Nome</label><input name="name" required placeholder="Ex: Empadão de Frango">
+      <div class="row"><div><label>Tamanho</label><input name="sizeValue" type="number" min="0" step="any" placeholder="350" required></div><div><label>Unidade</label><select name="sizeUnit" required>${renderUnitOptions('g')}</select></div></div>
       <label>Preço de venda (R$)</label><input name="price" type="number" step="any" required>
       <label>Estoque mínimo (un, opcional)</label><input name="minStock" type="number" step="any">
       <button class="primary" type="submit">Cadastrar produto</button>
     </form>
   </div>
   <div class="card"><h2>Produtos cadastrados</h2>
-    ${DB.products.length ? `<div class="summary-note">Valor total dos produtos acabados em estoque: <b>${fmtBRL(totalValue)}</b></div><div class="report-table-wrap"><table><tr><th>Nome</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Quantidade</th><th>Valor total</th><th></th></tr>${rows}<tr class="sheet-total"><td colspan="5">Total em estoque</td><td>${fmtBRL(totalValue)}</td><td></td></tr></table></div>` : '<div class="empty">Nenhum produto cadastrado.</div>'}
+    ${DB.products.length ? `<div class="summary-note">Valor total dos produtos acabados em estoque: <b>${fmtBRL(totalValue)}</b></div><div class="report-table-wrap"><table><tr><th>Nome</th><th>Tamanho</th><th>Unidade</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Quantidade</th><th>Valor total</th><th></th></tr>${rows}<tr class="sheet-total"><td colspan="7">Total em estoque</td><td>${fmtBRL(totalValue)}</td><td></td></tr></table></div>` : '<div class="empty">Nenhum produto cadastrado.</div>'}
   </div>`;
 }
 
@@ -933,7 +962,7 @@ let recipeDraftItems = [];
 function renderFichas(){
   if(!DB.products.length) return '<div class="card"><div class="empty">Cadastre um produto primeiro.</div></div>';
   if(!DB.ingredients.length) return '<div class="card"><div class="empty">Cadastre ingredientes primeiro.</div></div>';
-  const prodOptions = DB.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const prodOptions = DB.products.map(p=>`<option value="${p.id}">${formatProductLabel(p)}</option>`).join('');
   return `
   <div class="card"><h2>Montar ficha técnica</h2>
     <label>Produto</label><select id="fichaProduct">${prodOptions}</select>
@@ -957,7 +986,7 @@ function renderRecipesList(){
       return `<li>${ing?ing.name:'?'}: ${it.qty} ${it.unit}</li>`;
     }).join('');
     return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
-      <b>${p.name}</b> <span class="muted">(rende ${r.yield_qty} un)</span>
+      <b>${formatProductLabel(p)}</b> <span class="muted">(rende ${r.yield_qty} un)</span>
       <ul style="margin:6px 0;padding-left:18px;font-size:13px;">${items}</ul>
       <div class="muted">Custo por unidade: ${fmtBRL(recipeCostPerUnit(pid))}</div>
     </div>`;
@@ -987,10 +1016,10 @@ function refreshRecipeItemsList(){
 function renderProducao(){
   const validProducts = DB.products.filter(p=>DB.recipes[p.id]);
   if(!validProducts.length) return '<div class="card"><div class="empty">Cadastre uma ficha técnica primeiro.</div></div>';
-  const prodOptions = validProducts.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const prodOptions = validProducts.map(p=>`<option value="${p.id}">${formatProductLabel(p)}</option>`).join('');
   const rows = DB.productions.map(pr=>{
     const p = getProduct(pr.product_id);
-    return `<tr><td>${fmtDate(pr.production_date)}</td><td>${p?p.name:'—'}</td><td>${pr.usable_qty} un</td><td>${fmtBRL(pr.unit_cost)}</td><td>${fmtBRL(pr.batch_cost)}</td></tr>`;
+    return `<tr><td>${fmtDate(pr.production_date)}</td><td>${p?formatProductLabel(p):'—'}</td><td>${pr.usable_qty} un</td><td>${fmtBRL(pr.unit_cost)}</td><td>${fmtBRL(pr.batch_cost)}</td></tr>`;
   }).join('');
   return `
   <div class="card"><h2>Nova produção</h2>
@@ -1016,7 +1045,7 @@ function renderEstoque(){
   const ingRows = DB.ingredients.map(i=>`<tr><td>${i.name}</td><td>${displayQty(Number(i.stock),i.family)}</td>
     <td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td>
     <td>${Number(i.min_stock)>0 && Number(i.stock)<Number(i.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td></tr>`).join('');
-  const prodRows = DB.products.map(p=>`<tr><td>${p.name}</td><td>${p.stock} un</td>
+  const prodRows = DB.products.map(p=>`<tr><td>${formatProductLabel(p)}</td><td>${p.stock} un</td>
     <td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td>
     <td>${Number(p.min_stock)>0 && Number(p.stock)<Number(p.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td></tr>`).join('');
   return `
@@ -1118,7 +1147,7 @@ function renderReportSales(data){
   return `<div class="card report-section"><h3>Vendas e faturamento</h3><div class="report-table-wrap"><table><tr><th>Indicador</th><th>Valor</th></tr><tr><td>Faturamento</td><td>${fmtBRL(data.salesTotal)}</td></tr><tr><td>Custo dos produtos vendidos</td><td>${fmtBRL(data.salesCost)}</td></tr><tr><td>Lucro bruto</td><td>${fmtBRL(data.salesProfit)}</td></tr><tr><td>Margem bruta</td><td>${data.salesTotal>0?(data.salesProfit/data.salesTotal*100).toFixed(1):'0.0'}%</td></tr><tr><td>Quantidade de vendas</td><td>${data.sales.length}</td></tr></table></div>${data.sales.length?renderRecentSalesTable(data.sales.length,data.sales):'<div class="empty">Nenhuma venda no período.</div>'}</div>`;
 }
 function renderReportProduction(data){
-  const rows=data.productions.map(production=>{const product=getProduct(production.product_id);return `<tr><td>${fmtDate(production.production_date)}</td><td>${product?product.name:'Produto removido'}</td><td>${production.usable_qty} un</td><td>${production.qty_lost} un</td><td>${fmtBRL(production.batch_cost)}</td></tr>`;}).join('');
+  const rows=data.productions.map(production=>{const product=getProduct(production.product_id);return `<tr><td>${fmtDate(production.production_date)}</td><td>${product?formatProductLabel(product):'Produto removido'}</td><td>${production.usable_qty} un</td><td>${production.qty_lost} un</td><td>${fmtBRL(production.batch_cost)}</td></tr>`;}).join('');
   return `<div class="card report-section"><h3>Produção e custos</h3><div class="report-table-wrap"><table><tr><th>Indicador</th><th>Valor</th></tr><tr><td>Lotes produzidos</td><td>${data.productions.length}</td></tr><tr><td>Unidades aproveitáveis</td><td>${data.productionUnits}</td></tr><tr><td>Perdas</td><td>${data.productionLosses}</td></tr><tr><td>Custo total de produção</td><td>${fmtBRL(data.productionCost)}</td></tr></table></div>${rows?`<div class="report-table-wrap"><table><tr><th>Data</th><th>Produto</th><th>Aproveitadas</th><th>Perdas</th><th>Custo</th></tr>${rows}</table></div>`:'<div class="empty">Nenhuma produção no período.</div>'}</div>`;
 }
 function renderReportIngredients(data){
@@ -1127,7 +1156,7 @@ function renderReportIngredients(data){
 }
 function renderReportStock(data){
   const ingredientRows=DB.ingredients.map(i=>`<tr><td>${i.name}</td><td>Ingrediente</td><td>${displayQty(Number(i.stock),i.family)}</td><td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td><td>${displayCostPerBase(Number(i.avg_cost),i.family)}</td></tr>`).join('');
-  const productRows=DB.products.map(p=>`<tr><td>${p.name}</td><td>Produto</td><td>${p.stock} un</td><td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td><td>${fmtBRL(Number(p.last_unit_cost))} /un</td></tr>`).join('');
+  const productRows=DB.products.map(p=>`<tr><td>${formatProductLabel(p)}</td><td>Produto</td><td>${p.stock} un</td><td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td><td>${fmtBRL(Number(p.last_unit_cost))} /un</td></tr>`).join('');
   return `<div class="card report-section"><h3>Estoque e valor patrimonial</h3><div class="grid"><div class="kpi"><div class="label">Ingredientes</div><div class="value">${fmtBRL(data.stockIngredientsValue)}</div></div><div class="kpi"><div class="label">Produtos acabados</div><div class="value">${fmtBRL(data.stockProductsValue)}</div></div><div class="kpi"><div class="label">Estoque total</div><div class="value">${fmtBRL(data.stockIngredientsValue+data.stockProductsValue)}</div></div></div><div class="report-table-wrap"><table><tr><th>Item</th><th>Tipo</th><th>Quantidade</th><th>Valor atual</th><th>Custo utilizado</th></tr>${ingredientRows}${productRows}</table></div></div>`;
 }
 function renderRelatorios(){
@@ -1140,7 +1169,7 @@ let saleDraftLines = [];
 function renderVendas(){
   const rows = DB.sales.map(s=>`<tr>
     <td>${fmtDate(s.sale_date)}</td>
-    <td>${s.items.map(i=>(getProduct(i.product_id)?.name||'?')+' x'+i.qty).join(', ')}</td>
+    <td>${s.items.map(i=>formatProductLabel(getProduct(i.product_id))+' x'+i.qty).join(', ')}</td>
     <td>${fmtBRL(s.total)}</td>
     <td style="color:${Number(s.profit)>=0?'var(--good)':'var(--bad)'}">${fmtBRL(s.profit)}</td>
     <td>${s.cancelled ? '<span class="badge low">Cancelada</span>' : `<button class="danger" data-cancel="${s.id}">Cancelar</button>`}</td>
@@ -1161,7 +1190,7 @@ function renderVendas(){
   </div>`;
 }
 function renderSaleLineRow(idx, line){
-  const opts = DB.products.filter(p=>p.stock>0).map(p=>`<option value="${p.id}" ${line&&line.productId===p.id?'selected':''}>${p.name} (estoque: ${p.stock})</option>`).join('');
+  const opts = DB.products.filter(p=>p.stock>0).map(p=>`<option value="${p.id}" ${line&&line.productId===p.id?'selected':''}>${formatProductLabel(p)} (estoque: ${p.stock})</option>`).join('');
   return `<div class="sale-line" data-idx="${idx}">
     <select class="sl-product">${opts}</select>
     <input class="sl-qty" type="number" step="any" placeholder="Qtd" value="${line?line.qty:1}">
@@ -1209,13 +1238,13 @@ function updateSaleTotalPreview(){
 function attachHandlers(){
   document.querySelectorAll('.save-ingredient').forEach(btn=>btn.onclick = async e=>{
     const id = e.currentTarget.dataset.id;
-    const result = await updateIngredient(id, document.querySelector('.ing-name[data-id="'+id+'"]')?.value, document.querySelector('.ing-min[data-id="'+id+'"]')?.value);
+    const result = await updateIngredient(id, document.querySelector('.ing-name[data-id="'+id+'"]')?.value, document.querySelector('.ing-min[data-id="'+id+'"]')?.value, document.querySelector('.ing-unit[data-id="'+id+'"]')?.value);
     if(!result.ok){ toast('Erro: '+result.msg); return; }
     toast('Ingrediente atualizado!'); render();
   });
   document.querySelectorAll('.save-product').forEach(btn=>btn.onclick = async e=>{
     const id = e.currentTarget.dataset.id;
-    const result = await updateProduct(id, document.querySelector('.prod-name[data-id="'+id+'"]')?.value, document.querySelector('.prod-price[data-id="'+id+'"]')?.value, Number(getProduct(id)?.min_stock)||0);
+    const result = await updateProduct(id, document.querySelector('.prod-name[data-id="'+id+'"]')?.value, document.querySelector('.prod-price[data-id="'+id+'"]')?.value, Number(getProduct(id)?.min_stock)||0, document.querySelector('.prod-size[data-id="'+id+'"]')?.value, document.querySelector('.prod-size-unit[data-id="'+id+'"]')?.value);
     if(!result.ok){ toast('Erro: '+result.msg); return; }
     toast('Produto atualizado!'); render();
   });
@@ -1311,7 +1340,7 @@ function attachHandlers(){
   if(fp) fp.onsubmit = async (e)=>{
     e.preventDefault();
     const f = new FormData(fp);
-    const result = await registerProduct(f.get('name'), parseFloat(f.get('price')), parseFloat(f.get('minStock'))||0);
+    const result = await registerProduct(f.get('name'), parseFloat(f.get('price')), parseFloat(f.get('minStock'))||0, parseFloat(f.get('sizeValue')), f.get('sizeUnit'));
     if(!result.ok){ toast('Erro: '+result.msg); return; }
     toast('Produto cadastrado!'); render();
   };

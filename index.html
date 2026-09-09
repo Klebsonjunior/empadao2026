@@ -144,6 +144,7 @@
 
 <script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import Chart from 'https://esm.sh/chart.js@4/auto';
 
 // ===================== SUPABASE CONFIG =====================
 const SUPABASE_URL = 'https://hfeotdvlrmxvlecybmyc.supabase.co';
@@ -692,12 +693,65 @@ function metrics(){
   };
 }
 
+function computeSalesSeries(period){
+  const validSales = DB.sales.filter(s=>!s.cancelled);
+  const labels = [];
+  const faturamento = [];
+  const lucro = [];
+  if(period==='monthly'){
+    const now = new Date(todayISO()+'T00:00:00');
+    for(let i=11;i>=0;i--){
+      const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      const key = d.toISOString().slice(0,7);
+      const monthSales = validSales.filter(s=>s.sale_date.startsWith(key));
+      labels.push(d.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'}));
+      faturamento.push(monthSales.reduce((a,s)=>a+Number(s.total),0));
+      lucro.push(monthSales.reduce((a,s)=>a+Number(s.profit),0));
+    }
+  } else {
+    const now = new Date(todayISO()+'T00:00:00');
+    for(let i=13;i>=0;i--){
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()-i);
+      const key = d.toISOString().slice(0,10);
+      const daySales = validSales.filter(s=>s.sale_date===key);
+      labels.push(d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}));
+      faturamento.push(daySales.reduce((a,s)=>a+Number(s.total),0));
+      lucro.push(daySales.reduce((a,s)=>a+Number(s.profit),0));
+    }
+  }
+  return {labels, faturamento, lucro};
+}
+let salesChartInstance = null;
+function renderSalesChartCanvas(){
+  const canvas = document.getElementById('salesChart');
+  if(!canvas) return;
+  const {labels, faturamento, lucro} = computeSalesSeries(chartPeriod);
+  if(salesChartInstance){ salesChartInstance.destroy(); salesChartInstance = null; }
+  salesChartInstance = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {label:'Faturamento', data:faturamento, backgroundColor:'#b5502f', borderRadius:4},
+        {label:'Lucro', type:'line', data:lucro, borderColor:'#3f7d4f', backgroundColor:'#3f7d4f', tension:.3, pointRadius:3}
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'top'}, tooltip:{callbacks:{label: ctx=>ctx.dataset.label+': '+fmtBRL(ctx.raw)}} },
+      scales:{ y:{ ticks:{ callback: v=>fmtBRL(v) } } }
+    }
+  });
+}
+
 // ===================== RENDER =====================
 let activeTab = 'dashboard';
+let chartPeriod = 'daily';
 function render(){
   document.getElementById('subtitle').textContent = new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});
   document.getElementById('main').innerHTML = renderTab(activeTab);
   attachHandlers();
+  if(activeTab==='dashboard') renderSalesChartCanvas();
 }
 function renderTab(tab){
   if(tab==='dashboard') return renderDashboard();
@@ -731,6 +785,16 @@ function renderDashboard(){
     <div class="kpi"><div class="label">Valor em estoque</div><div class="value">${fmtBRL(m.stockValue)}</div></div>
   </div>
   <div class="card"><h2>Visão rápida do caixa</h2><div class="summary-note">No mês atual, foram registradas <b>${m.comprasQtdMes}</b> compras, totalizando <b>${fmtBRL(m.comprasMes)}</b> em desembolsos. O faturamento foi <b>${fmtBRL(m.faturamentoMes)}</b> e o lucro bruto calculado foi <b>${fmtBRL(m.lucroMes)}</b>.</div></div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <h2 style="margin:0;">Vendas ao longo do tempo</h2>
+      <select id="chartPeriod">
+        <option value="daily" ${chartPeriod==='daily'?'selected':''}>Diário (últimos 14 dias)</option>
+        <option value="monthly" ${chartPeriod==='monthly'?'selected':''}>Mensal (últimos 12 meses)</option>
+      </select>
+    </div>
+    <div style="position:relative;height:260px;margin-top:12px;"><canvas id="salesChart"></canvas></div>
+  </div>
   <div class="card"><h2>⚠️ Alertas de estoque baixo</h2>${renderLowStockAlerts()}</div>
   <div class="card"><h2>Últimas vendas</h2>${renderRecentSalesTable(5)}</div>`;
 }
@@ -986,7 +1050,11 @@ function renderRecipesList(){
       return `<li>${ing?ing.name:'?'}: ${it.qty} ${it.unit}</li>`;
     }).join('');
     return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
-      <b>${formatProductLabel(p)}</b> <span class="muted">(rende ${r.yield_qty} un)</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <b>${formatProductLabel(p)}</b>
+        <button type="button" class="secondary edit-recipe" data-id="${pid}">Editar</button>
+      </div>
+      <span class="muted">(rende ${r.yield_qty} un)</span>
       <ul style="margin:6px 0;padding-left:18px;font-size:13px;">${items}</ul>
       <div class="muted">Custo por unidade: ${fmtBRL(recipeCostPerUnit(pid))}</div>
     </div>`;
@@ -1260,6 +1328,8 @@ function attachHandlers(){
     purchaseDraftItems.push({ingredientId:result.data.id,purchaseQty:1,purchaseUnit:'pacote',contentQty:1,contentUnit:unit,totalCost:''});
     toast('Item cadastrado e adicionado à compra.'); render();
   };
+  const chartPeriodSel = document.getElementById('chartPeriod');
+  if(chartPeriodSel) chartPeriodSel.onchange = ()=>{ chartPeriod = chartPeriodSel.value; renderSalesChartCanvas(); };
   const openReports = document.getElementById('openReports');
   if(openReports) openReports.onclick = ()=>{
     activeTab = 'relatorios';
@@ -1351,6 +1421,19 @@ function attachHandlers(){
     refreshRecipeItemsList();
     addRi.onclick = ()=>{ recipeDraftItems.push({ingredientId:DB.ingredients[0]?.id,qty:'',unit:'kg'}); refreshRecipeItemsList(); };
   }
+  document.querySelectorAll('.edit-recipe').forEach(btn=>btn.onclick = ()=>{
+    const pid = btn.dataset.id;
+    const r = getRecipeByProduct(pid);
+    if(!r) return;
+    const fp = document.getElementById('fichaProduct');
+    const fy = document.getElementById('fichaYield');
+    if(fp) fp.value = pid;
+    if(fy) fy.value = r.yield_qty;
+    recipeDraftItems = r.items.map(it=>({ingredientId: it.ingredient_id, qty: it.qty, unit: it.unit}));
+    refreshRecipeItemsList();
+    toast('Ficha carregada para edição. Ajuste e clique em Salvar.');
+    document.querySelector('#main .card')?.scrollIntoView({behavior:'smooth'});
+  });
   const saveRecipeBtn = document.getElementById('saveRecipeBtn');
   if(saveRecipeBtn) saveRecipeBtn.onclick = async ()=>{
     const productId = document.getElementById('fichaProduct').value;

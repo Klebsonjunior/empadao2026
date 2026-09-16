@@ -19,18 +19,27 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
-  header{background:var(--surface);color:var(--ink);padding:16px 18px;position:sticky;top:0;z-index:10;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  header{background:var(--surface);color:var(--ink);padding:16px 20px;position:sticky;top:0;z-index:10;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;margin-left:236px;}
   header h1{margin:0;font-size:17px;font-weight:800;letter-spacing:-.01em;}
   header p{margin:2px 0 0;font-size:12px;color:var(--sub);}
   header button.logout{background:var(--surface-2);border:none;color:var(--ink);width:34px;height:34px;border-radius:var(--radius-pill);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;}
   header button.logout:hover{background:var(--surface-hover);}
-  nav{position:fixed;left:0;right:0;bottom:0;display:flex;gap:2px;overflow-x:auto;background:var(--surface);border-top:1px solid var(--border);padding:6px 8px 10px;z-index:20;-webkit-overflow-scrolling:touch;box-shadow:0 -4px 16px rgba(20,20,20,.05);}
+  nav{position:fixed;left:0;top:0;bottom:0;width:236px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;background:var(--surface);border-right:1px solid var(--border);padding:24px 14px 16px;z-index:20;-webkit-overflow-scrolling:touch;}
   nav::-webkit-scrollbar{display:none;}
-  nav button{flex:1 0 auto;min-width:62px;display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;border:none;color:var(--sub);padding:6px 6px;border-radius:12px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s;}
-  nav button .nav-icon{font-size:18px;line-height:1;}
+  nav::before{content:'🥧 Empadões';display:block;font-size:15px;font-weight:800;color:var(--ink);padding:0 10px 20px;letter-spacing:-.01em;}
+  nav button{flex:0 0 auto;width:100%;display:flex;flex-direction:row;align-items:center;gap:12px;background:transparent;border:none;color:var(--sub);padding:11px 12px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap;text-align:left;transition:background .15s,color .15s;}
+  nav button .nav-icon{font-size:17px;line-height:1;}
   nav button.active{background:rgba(217,98,46,.1);color:var(--accent);}
   button:focus-visible,input:focus-visible,select:focus-visible,nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-  main{padding:16px 14px;max-width:880px;margin:0 auto;padding-bottom:110px;}
+  main{padding:22px 24px 60px;max-width:1040px;margin:0 auto;margin-left:calc(236px + 24px);}
+  @media(max-width:780px){
+    header{margin-left:0;}
+    nav{left:0;right:0;top:auto;bottom:0;width:auto;height:auto;flex-direction:row;overflow-x:auto;overflow-y:visible;border-right:none;border-top:1px solid var(--border);padding:6px 8px 10px;box-shadow:0 -4px 16px rgba(20,20,20,.05);}
+    nav::before{display:none;}
+    nav button{flex:1 0 auto;min-width:60px;flex-direction:column;gap:2px;padding:6px 4px;font-size:10.5px;text-align:center;border-radius:12px;}
+    nav button .nav-icon{font-size:18px;}
+    main{margin-left:0;padding:16px 14px 110px;max-width:880px;}
+  }
   .tab{display:none;}
   .tab.active{display:block;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:14px;box-shadow:var(--shadow);}
@@ -56,7 +65,14 @@
   table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;}
   th{text-align:left;color:var(--sub);font-size:11px;font-weight:600;padding:8px 6px;border-bottom:1px solid var(--border);}
   td{padding:11px 6px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;}
-  .empty{color:var(--sub);font-size:13px;padding:24px 0;text-align:center;}
+  tbody tr:hover, table tr:hover{background:var(--surface-2);}
+  .empty{color:var(--sub);font-size:13px;padding:32px 0;text-align:center;}
+  .empty::before{content:'📭';display:block;font-size:26px;margin-bottom:8px;}
+  .list-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 4px;border-bottom:1px solid var(--border);}
+  .list-row:last-child{border-bottom:none;}
+  .list-row-main{flex:1;min-width:180px;}
+  .list-row-title{font-weight:700;font-size:13.5px;}
+  .list-row-sub{color:var(--sub);font-size:12px;margin-top:2px;}
   .badge{display:inline-block;padding:3px 10px;border-radius:var(--radius-pill);font-size:11px;font-weight:700;}
   .badge.low{background:rgba(229,72,77,.1);color:var(--bad);}
   .badge.ok{background:rgba(47,158,92,.1);color:var(--good);}
@@ -782,7 +798,7 @@ function renderTab(tab){
 function renderDashboard(){
   const m = metrics();
   return `
-  <div class="card report-access-card"><div><h2>Relatórios</h2><div class="muted">Gere relatórios financeiros e operacionais por período.</div></div><button class="primary report-access-button" type="button" id="openReports">Abrir relatórios</button></div>
+  <div class="card report-access-card"><div><h2>📈 Relatórios</h2><div class="muted">Gere relatórios financeiros e operacionais por período.</div></div><button class="primary report-access-button" type="button" id="openReports">Abrir relatórios</button></div>
   <div class="grid">
     <div class="kpi"><div class="label">Faturamento hoje</div><div class="value">${fmtBRL(m.faturamentoHoje)}</div></div>
     <div class="kpi"><div class="label">Faturamento mês</div><div class="value">${fmtBRL(m.faturamentoMes)}</div></div>
@@ -797,10 +813,10 @@ function renderDashboard(){
     <div class="kpi"><div class="label">Idas ao mercado/fornecedor</div><div class="value">${m.comprasQtdMes}</div></div>
     <div class="kpi"><div class="label">Valor em estoque</div><div class="value">${fmtBRL(m.stockValue)}</div></div>
   </div>
-  <div class="card"><h2>Visão rápida do caixa</h2><div class="summary-note">No mês atual, foram registradas <b>${m.comprasQtdMes}</b> compras, totalizando <b>${fmtBRL(m.comprasMes)}</b> em desembolsos. O faturamento foi <b>${fmtBRL(m.faturamentoMes)}</b> e o lucro bruto calculado foi <b>${fmtBRL(m.lucroMes)}</b>.</div></div>
+  <div class="card"><h2>💰 Visão rápida do caixa</h2><div class="summary-note">No mês atual, foram registradas <b>${m.comprasQtdMes}</b> compras, totalizando <b>${fmtBRL(m.comprasMes)}</b> em desembolsos. O faturamento foi <b>${fmtBRL(m.faturamentoMes)}</b> e o lucro bruto calculado foi <b>${fmtBRL(m.lucroMes)}</b>.</div></div>
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-      <h2 style="margin:0;">Vendas ao longo do tempo</h2>
+      <h2 style="margin:0;">📈 Vendas ao longo do tempo</h2>
       <select id="chartPeriod">
         <option value="daily" ${chartPeriod==='daily'?'selected':''}>Diário (últimos 14 dias)</option>
         <option value="monthly" ${chartPeriod==='monthly'?'selected':''}>Mensal (últimos 12 meses)</option>
@@ -809,15 +825,15 @@ function renderDashboard(){
     <div style="position:relative;height:260px;margin-top:12px;"><canvas id="salesChart"></canvas></div>
   </div>
   <div class="card"><h2>⚠️ Alertas de estoque baixo</h2>${renderLowStockAlerts()}</div>
-  <div class="card"><h2>Últimas vendas</h2>${renderRecentSalesTable(5)}</div>`;
+  <div class="card"><h2>🧾 Últimas vendas</h2>${renderRecentSalesTable(5)}</div>`;
 }
 function renderLowStockAlerts(){
   const lowIng = DB.ingredients.filter(i=>Number(i.min_stock)>0 && Number(i.stock)<Number(i.min_stock));
   const lowProd = DB.products.filter(p=>Number(p.min_stock)>0 && Number(p.stock)<Number(p.min_stock));
   if(!lowIng.length && !lowProd.length) return '<div class="empty">Nenhum alerta no momento.</div>';
   let html='';
-  lowIng.forEach(i=>html+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">🧂 <b>${i.name}</b> — ${displayQty(Number(i.stock),i.family)} <span class="muted">(mín: ${displayQty(Number(i.min_stock),i.family)})</span></div>`);
-  lowProd.forEach(p=>html+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">🥧 <b>${formatProductLabel(p)}</b> — ${p.stock} un <span class="muted">(mín: ${p.min_stock} un)</span></div>`);
+  lowIng.forEach(i=>html+=`<div class="list-row"><div class="list-row-main"><div class="list-row-title">🧂 ${i.name}</div><div class="list-row-sub">Estoque: ${displayQty(Number(i.stock),i.family)} · mín: ${displayQty(Number(i.min_stock),i.family)}</div></div><span class="badge low">Baixo</span></div>`);
+  lowProd.forEach(p=>html+=`<div class="list-row"><div class="list-row-main"><div class="list-row-title">🥧 ${formatProductLabel(p)}</div><div class="list-row-sub">Estoque: ${p.stock} un · mín: ${p.min_stock} un</div></div><span class="badge low">Baixo</span></div>`);
   return html;
 }
 function renderRecentSalesTable(limit, source=DB.sales){
@@ -843,7 +859,7 @@ function renderIngredientes(){
     <td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td><td class="sheet-actions"><button class="secondary save-ingredient" data-id="${i.id}" type="button">Salvar</button></td>
   </tr>`).join('');
   return `
-  <div class="card"><h2>Novo ingrediente</h2>
+  <div class="card"><h2>🧂 Novo ingrediente</h2>
     <form id="form-ingrediente">
       <label>Nome</label><input name="name" required placeholder="Ex: Farinha de trigo">
       <label>Unidade de medida</label>
@@ -857,7 +873,7 @@ function renderIngredientes(){
       <button class="primary" type="submit">Cadastrar ingrediente</button>
     </form>
   </div>
-  <div class="card"><h2>Ingredientes cadastrados</h2>
+  <div class="card"><h2>🧂 Ingredientes cadastrados</h2>
     ${DB.ingredients.length ? `<div class="summary-note">Valor total dos ingredientes em estoque: <b>${fmtBRL(totalValue)}</b></div><div class="report-table-wrap"><table><tr><th>Nome</th><th>Unidade</th><th>Quantidade</th><th>Custo médio</th><th>Estoque mínimo</th><th>Valor total</th><th></th></tr>${rows}<tr class="sheet-total"><td colspan="5">Total em estoque</td><td>${fmtBRL(totalValue)}</td><td></td></tr></table></div>` : '<div class="empty">Nenhum ingrediente cadastrado.</div>'}
   </div>`;
 }
@@ -985,7 +1001,7 @@ function renderPurchaseBatch(batch){
 function renderCompras(){
   const batches = DB.purchaseBatches||[];
   return `
-  <div class="card"><h2>Nova compra / entrada de caixa</h2>
+  <div class="card"><h2>🛒 Nova compra / entrada de caixa</h2>
     <div class="summary-note">Informe a compra como veio na nota. Exemplo: <b>3 pacotes</b>, com <b>1 kg por pacote</b>, valor total <b>R$ 90,00</b>. O sistema converte automaticamente para <b>3 kg no estoque</b>, calcula o custo por kg e usa esse valor para calcular qualquer quantidade da receita, como 200 g.</div>
     <form id="form-compra" style="margin-top:12px;">
       <div class="row">
@@ -1006,7 +1022,7 @@ function renderCompras(){
       <button class="primary" type="submit">Registrar compra completa</button>
     </form>
   </div>
-  <div class="card"><h2>Histórico de compras</h2>
+  <div class="card"><h2>🛒 Histórico de compras</h2>
     ${batches.length ? batches.map(renderPurchaseBatch).join('') : '<div class="empty">Nenhuma compra composta registrada.</div>'}
     ${DB.purchases.some(p=>!p.purchase_batch_id)?'<div class="summary-note" style="margin-top:10px;">Existem lançamentos antigos cadastrados antes do modelo de compras compostas. Eles continuam no banco e serão considerados nos relatórios pelo valor individual.</div>':''}
   </div>`;
@@ -1021,7 +1037,7 @@ function renderProdutos(){
       <td style="color:${margin>=0?'var(--good)':'var(--bad)'}">${margin.toFixed(0)}%</td><td>${p.stock} un</td><td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td><td class="sheet-actions"><button class="secondary save-product" data-id="${p.id}" type="button">Salvar</button></td></tr>`;
   }).join('');
   return `
-  <div class="card"><h2>Novo produto</h2>
+  <div class="card"><h2>🥧 Novo produto</h2>
     <form id="form-produto">
       <label>Nome</label><input name="name" required placeholder="Ex: Empadão de Frango">
       <div class="row"><div><label>Tamanho</label><input name="sizeValue" type="number" min="0" step="any" placeholder="350" required></div><div><label>Unidade</label><select name="sizeUnit" required>${renderUnitOptions('g')}</select></div></div>
@@ -1030,7 +1046,7 @@ function renderProdutos(){
       <button class="primary" type="submit">Cadastrar produto</button>
     </form>
   </div>
-  <div class="card"><h2>Produtos cadastrados</h2>
+  <div class="card"><h2>🥧 Produtos cadastrados</h2>
     ${DB.products.length ? `<div class="summary-note">Valor total dos produtos acabados em estoque: <b>${fmtBRL(totalValue)}</b></div><div class="report-table-wrap"><table><tr><th>Nome</th><th>Tamanho</th><th>Unidade</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Quantidade</th><th>Valor total</th><th></th></tr>${rows}<tr class="sheet-total"><td colspan="7">Total em estoque</td><td>${fmtBRL(totalValue)}</td><td></td></tr></table></div>` : '<div class="empty">Nenhum produto cadastrado.</div>'}
   </div>`;
 }
@@ -1041,7 +1057,7 @@ function renderFichas(){
   if(!DB.ingredients.length) return '<div class="card"><div class="empty">Cadastre ingredientes primeiro.</div></div>';
   const prodOptions = DB.products.map(p=>`<option value="${p.id}">${formatProductLabel(p)}</option>`).join('');
   return `
-  <div class="card"><h2>Montar ficha técnica</h2>
+  <div class="card"><h2>📋 Montar ficha técnica</h2>
     <label>Produto</label><select id="fichaProduct">${prodOptions}</select>
     <label>Rendimento (quantas unidades essa receita produz)</label>
     <input id="fichaYield" type="number" step="any" value="1">
@@ -1049,7 +1065,7 @@ function renderFichas(){
     <button class="secondary" id="addRecipeItem" type="button">+ Adicionar ingrediente</button>
     <button class="primary" id="saveRecipeBtn" type="button" style="margin-top:10px;">Salvar ficha técnica</button>
   </div>
-  <div class="card"><h2>Fichas técnicas cadastradas</h2>${renderRecipesList()}</div>`;
+  <div class="card"><h2>📋 Fichas técnicas cadastradas</h2>${renderRecipesList()}</div>`;
 }
 function renderRecipesList(){
   const productIds = Object.keys(DB.recipes);
@@ -1062,14 +1078,15 @@ function renderRecipesList(){
       const ing = getIngredient(it.ingredient_id);
       return `<li>${ing?ing.name:'?'}: ${it.qty} ${it.unit}</li>`;
     }).join('');
-    return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+    return `<div class="list-row" style="flex-direction:column;align-items:stretch;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <b>${formatProductLabel(p)}</b>
+        <div class="list-row-main">
+          <div class="list-row-title">🥧 ${formatProductLabel(p)}</div>
+          <div class="list-row-sub">Rende ${r.yield_qty} un · Custo por unidade: ${fmtBRL(recipeCostPerUnit(pid))}</div>
+        </div>
         <button type="button" class="secondary edit-recipe" data-id="${pid}">Editar</button>
       </div>
-      <span class="muted">(rende ${r.yield_qty} un)</span>
-      <ul style="margin:6px 0;padding-left:18px;font-size:13px;">${items}</ul>
-      <div class="muted">Custo por unidade: ${fmtBRL(recipeCostPerUnit(pid))}</div>
+      <ul style="margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--sub);">${items}</ul>
     </div>`;
   }).join('');
 }
@@ -1103,7 +1120,7 @@ function renderProducao(){
     return `<tr><td>${fmtDate(pr.production_date)}</td><td>${p?formatProductLabel(p):'—'}</td><td>${pr.usable_qty} un</td><td>${fmtBRL(pr.unit_cost)}</td><td>${fmtBRL(pr.batch_cost)}</td></tr>`;
   }).join('');
   return `
-  <div class="card"><h2>Nova produção</h2>
+  <div class="card"><h2>👨‍🍳 Nova produção</h2>
     <form id="form-producao">
       <label>Produto</label><select name="productId" id="producaoProduct" required>${prodOptions}</select>
       <label>Data</label><input name="date" type="date" value="${todayISO()}" required>
@@ -1115,7 +1132,7 @@ function renderProducao(){
       <button class="primary" type="submit">Confirmar produção</button>
     </form>
   </div>
-  <div class="card"><h2>Histórico de produção</h2>
+  <div class="card"><h2>👨‍🍳 Histórico de produção</h2>
     ${DB.productions.length ? `<table><tr><th>Data</th><th>Produto</th><th>Unid.</th><th>Custo/un</th><th>Custo lote</th></tr>${rows}</table>` : '<div class="empty">Nenhuma produção registrada.</div>'}
   </div>`;
 }
@@ -1130,12 +1147,12 @@ function renderEstoque(){
     <td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td>
     <td>${Number(p.min_stock)>0 && Number(p.stock)<Number(p.min_stock) ? '<span class="badge low">Baixo</span>':'<span class="badge ok">OK</span>'}</td></tr>`).join('');
   return `
-  <div class="card"><h2>Estoque de ingredientes</h2>
+  <div class="card"><h2>📦 Estoque de ingredientes</h2>
     ${DB.ingredients.length ? `<div class="summary-note">Quantidade de ingredientes: <b>${DB.ingredients.length}</b> · Valor total: <b>${fmtBRL(ingredientsTotal)}</b></div><div class="report-table-wrap"><table><tr><th>Item</th><th>Quantidade</th><th>Valor total</th><th>Status</th></tr>${ingRows}<tr class="sheet-total"><td colspan="2">Total ingredientes</td><td>${fmtBRL(ingredientsTotal)}</td><td></td></tr></table></div>` : '<div class="empty">Sem ingredientes.</div>'}
   </div>
-  <div class="card"><h2>Estoque de produtos acabados</h2>
+  <div class="card"><h2>📦 Estoque de produtos acabados</h2>
     ${DB.products.length ? `<div class="summary-note">Quantidade de produtos: <b>${DB.products.length}</b> · Valor total: <b>${fmtBRL(productsTotal)}</b></div><div class="report-table-wrap"><table><tr><th>Item</th><th>Quantidade</th><th>Valor total</th><th>Status</th></tr>${prodRows}<tr class="sheet-total"><td colspan="2">Total produtos</td><td>${fmtBRL(productsTotal)}</td><td></td></tr></table></div>` : '<div class="empty">Sem produtos.</div>'}
-  <div class="card"><h2>Valor total do estoque</h2><div class="kpi"><div class="label">Ingredientes + produtos acabados</div><div class="value">${fmtBRL(ingredientsTotal+productsTotal)}</div></div></div>
+  <div class="card"><h2>📦 Valor total do estoque</h2><div class="kpi"><div class="label">Ingredientes + produtos acabados</div><div class="value">${fmtBRL(ingredientsTotal+productsTotal)}</div></div></div>
   </div>`;
 }
 
@@ -1243,7 +1260,7 @@ function renderReportStock(data){
 function renderRelatorios(){
   const data=reportData();
   const visible=area=>reportState.area==='all'||reportState.area===area;
-  return `<div class="card no-print"><h2>Relatórios financeiros e operacionais</h2><div class="summary-note">Escolha um período e uma área. A opção consolidada reúne caixa, compras, vendas, produção, ingredientes e estoque. Use “Imprimir relatório” para gerar uma versão pronta para salvar ou anexar à prestação de contas.</div><div class="report-toolbar" style="margin-top:12px;"><div class="field"><label>Data inicial</label><input id="reportStart" type="date" value="${data.start}"></div><div class="field"><label>Data final</label><input id="reportEnd" type="date" value="${data.end}"></div><div class="presets"><button class="secondary ${reportState.preset==='day'?'active':''}" type="button" data-report-preset="day">Hoje</button><button class="secondary ${reportState.preset==='week'?'active':''}" type="button" data-report-preset="week">Semana</button><button class="secondary ${reportState.preset==='month'?'active':''}" type="button" data-report-preset="month">Mês</button></div><button class="secondary" id="printReport" type="button">Imprimir relatório</button></div><div class="presets" style="margin-top:10px;"><button class="secondary ${reportState.area==='all'?'active':''}" type="button" data-report-area="all">Consolidado</button><button class="secondary ${reportState.area==='compras'?'active':''}" type="button" data-report-area="compras">Compras</button><button class="secondary ${reportState.area==='vendas'?'active':''}" type="button" data-report-area="vendas">Vendas</button><button class="secondary ${reportState.area==='producao'?'active':''}" type="button" data-report-area="producao">Produção</button><button class="secondary ${reportState.area==='ingredientes'?'active':''}" type="button" data-report-area="ingredientes">Ingredientes</button><button class="secondary ${reportState.area==='estoque'?'active':''}" type="button" data-report-area="estoque">Estoque</button></div></div><div class="print-only"><h1>Relatório do Controle Empadões</h1><p>Período: ${periodLabel(data.start,data.end)}</p></div><div class="card"><h2>${reportState.area==='all'?'Relatório consolidado':'Relatório de '+({compras:'compras',vendas:'vendas',producao:'produção',ingredientes:'ingredientes e insumos',estoque:'estoque'}[reportState.area]||'área')}</h2><div class="muted">Período: ${periodLabel(data.start,data.end)}</div>${renderReportKpis(data)}</div>${visible('compras')?renderReportPurchases(data):''}${visible('vendas')?renderReportSales(data):''}${visible('producao')?renderReportProduction(data):''}${visible('ingredientes')?renderReportIngredients(data):''}${visible('estoque')?renderReportStock(data):''}`;
+  return `<div class="card no-print"><h2>📈 Relatórios financeiros e operacionais</h2><div class="summary-note">Escolha um período e uma área. A opção consolidada reúne caixa, compras, vendas, produção, ingredientes e estoque. Use “Imprimir relatório” para gerar uma versão pronta para salvar ou anexar à prestação de contas.</div><div class="report-toolbar" style="margin-top:12px;"><div class="field"><label>Data inicial</label><input id="reportStart" type="date" value="${data.start}"></div><div class="field"><label>Data final</label><input id="reportEnd" type="date" value="${data.end}"></div><div class="presets"><button class="secondary ${reportState.preset==='day'?'active':''}" type="button" data-report-preset="day">Hoje</button><button class="secondary ${reportState.preset==='week'?'active':''}" type="button" data-report-preset="week">Semana</button><button class="secondary ${reportState.preset==='month'?'active':''}" type="button" data-report-preset="month">Mês</button></div><button class="secondary" id="printReport" type="button">Imprimir relatório</button></div><div class="presets" style="margin-top:10px;"><button class="secondary ${reportState.area==='all'?'active':''}" type="button" data-report-area="all">Consolidado</button><button class="secondary ${reportState.area==='compras'?'active':''}" type="button" data-report-area="compras">Compras</button><button class="secondary ${reportState.area==='vendas'?'active':''}" type="button" data-report-area="vendas">Vendas</button><button class="secondary ${reportState.area==='producao'?'active':''}" type="button" data-report-area="producao">Produção</button><button class="secondary ${reportState.area==='ingredientes'?'active':''}" type="button" data-report-area="ingredientes">Ingredientes</button><button class="secondary ${reportState.area==='estoque'?'active':''}" type="button" data-report-area="estoque">Estoque</button></div></div><div class="print-only"><h1>Relatório do Controle Empadões</h1><p>Período: ${periodLabel(data.start,data.end)}</p></div><div class="card"><h2>📈 ${reportState.area==='all'?'Relatório consolidado':'Relatório de '+({compras:'compras',vendas:'vendas',producao:'produção',ingredientes:'ingredientes e insumos',estoque:'estoque'}[reportState.area]||'área')}</h2><div class="muted">Período: ${periodLabel(data.start,data.end)}</div>${renderReportKpis(data)}</div>${visible('compras')?renderReportPurchases(data):''}${visible('vendas')?renderReportSales(data):''}${visible('producao')?renderReportProduction(data):''}${visible('ingredientes')?renderReportIngredients(data):''}${visible('estoque')?renderReportStock(data):''}`;
 }
 
 let saleDraftLines = [];
@@ -1256,7 +1273,7 @@ function renderVendas(){
     <td>${s.cancelled ? '<span class="badge low">Cancelada</span>' : `<button class="danger" data-cancel="${s.id}">Cancelar</button>`}</td>
   </tr>`).join('');
   return `
-  <div class="card"><h2>Nova venda</h2>
+  <div class="card"><h2>🧾 Nova venda</h2>
     ${!DB.products.some(p=>p.stock>0) ? '<div class="empty">Nenhum produto com estoque disponível. Produza primeiro.</div>' : `
     <div id="saleLinesList"></div>
     <button class="secondary" id="addSaleLine" type="button">+ Adicionar item</button>
@@ -1266,7 +1283,7 @@ function renderVendas(){
     <button class="primary" id="confirmSaleBtn" type="button">Finalizar venda</button>
     `}
   </div>
-  <div class="card"><h2>Histórico de vendas</h2>
+  <div class="card"><h2>🧾 Histórico de vendas</h2>
     ${DB.sales.length ? `<table><tr><th>Data</th><th>Itens</th><th>Total</th><th>Lucro</th><th></th></tr>${rows}</table>` : '<div class="empty">Nenhuma venda registrada.</div>'}
   </div>`;
 }

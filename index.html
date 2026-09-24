@@ -501,6 +501,26 @@ async function updateProduct(id, name, price, minStock, sizeValue, sizeUnit){
   return loaded.ok ? {ok:true} : loaded;
 }
 
+async function deactivateIngredient(id){
+  const ingredient = getIngredient(id);
+  if(!ingredient) return failedResult({message:'Ingrediente não encontrado.'});
+  if(Number(ingredient.stock) !== 0) return failedResult({message:'Zere o estoque desse ingrediente antes de removê-lo (assim o valor em estoque não some do histórico).'});
+  const {error} = await supabase.from('ingredients').update({active:false, updated_at:new Date().toISOString()}).eq('id',id);
+  if(error) return failedResult(error,'Não foi possível remover o ingrediente.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
+async function deactivateProduct(id){
+  const product = getProduct(id);
+  if(!product) return failedResult({message:'Produto não encontrado.'});
+  if(Number(product.stock) !== 0) return failedResult({message:'Zere o estoque desse produto antes de removê-lo (assim o valor em estoque não some do histórico).'});
+  const {error} = await supabase.from('products').update({active:false, updated_at:new Date().toISOString()}).eq('id',id);
+  if(error) return failedResult(error,'Não foi possível remover o produto.');
+  const loaded = await loadAll();
+  return loaded.ok ? {ok:true} : loaded;
+}
+
 async function saveRecipe(productId, items, yieldQty){
   const product = getProduct(productId);
   const rendimento = Number(yieldQty);
@@ -511,20 +531,11 @@ async function saveRecipe(productId, items, yieldQty){
     return failedResult({message:'Revise os ingredientes, quantidades e unidades da ficha.'});
   }
 
-  let recipe = DB.recipes[productId];
-  if(!recipe){
-    const {data, error} = await supabase.from('recipes').insert({product_id: productId, yield_qty: rendimento}).select().single();
-    if(error) return failedResult(error, 'Não foi possível criar a ficha técnica.');
-    recipe = data;
-  } else {
-    const {error} = await supabase.from('recipes').update({yield_qty: rendimento, updated_at: new Date().toISOString()}).eq('id', recipe.id);
-    if(error) return failedResult(error, 'Não foi possível atualizar a ficha técnica.');
-    const {error: deleteError} = await supabase.from('recipe_items').delete().eq('recipe_id', recipe.id);
-    if(deleteError) return failedResult(deleteError, 'Não foi possível substituir os ingredientes da ficha.');
-  }
-  const rows = items.map(it=>({recipe_id: recipe.id, ingredient_id: it.ingredientId, qty:Number(it.qty), unit:it.unit}));
-  const {error: riErr} = await supabase.from('recipe_items').insert(rows);
-  if(riErr) return failedResult(riErr, 'Não foi possível salvar os ingredientes da ficha.');
+  const rows = items.map(it=>({ingredient_id: it.ingredientId, qty:Number(it.qty), unit:it.unit}));
+  const {error} = await supabase.rpc('save_recipe', {
+    p_product_id: productId, p_yield_qty: rendimento, p_items: rows
+  });
+  if(error) return failedResult(error, 'Não foi possível salvar a ficha técnica.');
   const loaded = await loadAll();
   return loaded.ok ? {ok:true} : loaded;
 }
@@ -846,7 +857,7 @@ function renderIngredientes(){
     <td>${displayQty(Number(i.stock),i.family)}</td>
     <td>${displayCostPerBase(Number(i.avg_cost),i.family)}</td>
     <td><input class="sheet-input ing-min" data-id="${i.id}" type="number" min="0" step="any" value="${Number(i.min_stock)/TO_BASE[i.unit]}"></td>
-    <td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td><td class="sheet-actions"><button class="secondary save-ingredient" data-id="${i.id}" type="button">Salvar</button></td>
+    <td>${fmtBRL(Number(i.stock)*Number(i.avg_cost))}</td><td class="sheet-actions"><button class="secondary save-ingredient" data-id="${i.id}" type="button">Salvar</button> <button class="danger remove-ingredient" data-id="${i.id}" type="button">Remover</button></td>
   </tr>`).join('');
   return `
   <div class="card"><h2>🧂 Novo ingrediente</h2>
@@ -1024,7 +1035,7 @@ function renderProdutos(){
     const cost = Number(p.last_unit_cost) || recipeCostPerUnit(p.id);
     const margin = p.price>0 ? ((p.price-cost)/p.price*100) : 0;
     return `<tr><td><input class="sheet-input prod-name" data-id="${p.id}" value="${p.name.replace(/"/g,'&quot;')}"></td><td><input class="sheet-input prod-size" data-id="${p.id}" type="number" min="0" step="any" value="${p.size_value??''}" placeholder="Tamanho"></td><td><select class="sheet-input prod-size-unit" data-id="${p.id}">${renderOptionalUnitOptions(p.size_unit)}</select></td><td><input class="sheet-input prod-price" data-id="${p.id}" type="number" min="0" step="0.01" value="${Number(p.price)}"></td><td>${fmtBRL(cost)}</td>
-      <td style="color:${margin>=0?'var(--good)':'var(--bad)'}">${margin.toFixed(0)}%</td><td>${p.stock} un</td><td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td><td class="sheet-actions"><button class="secondary save-product" data-id="${p.id}" type="button">Salvar</button></td></tr>`;
+      <td style="color:${margin>=0?'var(--good)':'var(--bad)'}">${margin.toFixed(0)}%</td><td>${p.stock} un</td><td>${fmtBRL(Number(p.stock)*Number(p.last_unit_cost))}</td><td class="sheet-actions"><button class="secondary save-product" data-id="${p.id}" type="button">Salvar</button> <button class="danger remove-product" data-id="${p.id}" type="button">Remover</button></td></tr>`;
   }).join('');
   return `
   <div class="card"><h2>🥧 Novo produto</h2>
@@ -1335,6 +1346,22 @@ function attachHandlers(){
     const result = await updateProduct(id, document.querySelector('.prod-name[data-id="'+id+'"]')?.value, document.querySelector('.prod-price[data-id="'+id+'"]')?.value, Number(getProduct(id)?.min_stock)||0, document.querySelector('.prod-size[data-id="'+id+'"]')?.value, document.querySelector('.prod-size-unit[data-id="'+id+'"]')?.value);
     if(!result.ok){ toast('Erro: '+result.msg); return; }
     toast('Produto atualizado!'); render();
+  });
+  document.querySelectorAll('.remove-ingredient').forEach(btn=>btn.onclick = async e=>{
+    const id = e.currentTarget.dataset.id;
+    const ing = getIngredient(id);
+    if(!confirm('Remover "'+(ing?.name||'este ingrediente')+'"? Ele deixará de aparecer nas listas, mas o histórico de compras e produções continua registrado.')) return;
+    const result = await deactivateIngredient(id);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    toast('Ingrediente removido.'); render();
+  });
+  document.querySelectorAll('.remove-product').forEach(btn=>btn.onclick = async e=>{
+    const id = e.currentTarget.dataset.id;
+    const prod = getProduct(id);
+    if(!confirm('Remover "'+(prod?formatProductLabel(prod):'este produto')+'"? Ele deixará de aparecer nas listas, mas o histórico de vendas e produções continua registrado.')) return;
+    const result = await deactivateProduct(id);
+    if(!result.ok){ toast('Erro: '+result.msg); return; }
+    toast('Produto removido.'); render();
   });
   const addIngredientFromPurchase = document.getElementById('addIngredientFromPurchase');
   if(addIngredientFromPurchase) addIngredientFromPurchase.onclick = ()=>{
